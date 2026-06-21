@@ -1,3 +1,7 @@
+**[中文](#猜數字遊戲) · [English](#guess-the-code)**
+
+---
+
 # 猜數字遊戲
 
 一款考驗邏輯推理與系統性排除能力的數字解謎遊戲。
@@ -62,3 +66,71 @@
 ## 開發
 
 使用 React 開發，於 Claude.ai Artifacts 環境運行。
+
+---
+---
+
+# Guess the Code
+
+A number-deduction puzzle that tests logical reasoning and systematic elimination.
+
+---
+
+## Overview
+
+The computer randomly generates four **unique** digits as the secret code. Through repeated guesses and analysis of the feedback, the player gradually deduces the correct answer.
+
+---
+
+## Rules
+
+1. The computer randomly picks **4 unique digits** from 0–9 and arranges them in a fixed order
+2. Each round the player enters a 4-digit guess — **guesses may contain repeated digits**
+3. The computer returns **how many positions are correct**
+   - It only reveals the *count* of correct positions, **not which positions**
+   - It does **not** reveal whether a digit exists in the answer at all
+4. The player keeps guessing based on the feedback until all 4 positions are correct
+
+---
+
+## Example
+
+Suppose the answer is `3 8 1 6`
+
+| Guess | Feedback | Notes |
+|-------|----------|-------|
+| `1111` | 1 position correct | The `1` in the third spot is right (repeats allowed) |
+| `3333` | 1 position correct | The `3` in the first spot is right (repeats allowed) |
+| `3812` | 2 positions correct | First `3` and second `8` are right |
+| `3816` | 4 positions correct | All correct! |
+
+---
+
+## Win Condition
+
+Guess all 4 digits **in the exact correct order**.
+
+---
+
+## Strategy Tips
+
+- **Difference method**: change only one position's digit each turn and watch the score
+  - Score +1 → the new digit is correct in that position
+  - Score −1 → the old digit was correct in that position
+  - Score unchanged → neither is the answer for that position
+- **Use repeated guesses**: guessing `1111` quickly confirms whether `1` appears in some position, then combine with the difference method to narrow down
+- First use `0000`–`9999` to confirm which digits appear and where
+- Then pin down the correct digit for each position one by one
+
+---
+
+## Technical Notes
+
+- Answer space: 10 × 9 × 8 × 7 = **5,040 possible combinations**
+- Recommended minimum: about **10–14 guesses** guarantees a solution
+
+---
+
+## Development
+
+Built with React, running in the Claude.ai Artifacts environment.
