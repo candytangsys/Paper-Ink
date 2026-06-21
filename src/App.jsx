@@ -229,6 +229,24 @@ export default function App() {
               letterSpacing: 1,
             }}>{t.playAgain}</button>
           </div>
+        ) : revealed ? (
+          /* Revealed: answer shown, must restart */
+          <div style={{ textAlign: "center", padding: "4px 0" }}>
+            <div style={{ fontSize: 15, color: "#888", marginBottom: 16 }}>
+              {t.answerIs(secret.join(""))}
+            </div>
+            <button onClick={handleRestart} style={{
+              background: "#6c63ff",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              padding: "10px 28px",
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: "pointer",
+              letterSpacing: 1,
+            }}>{t.playAgain}</button>
+          </div>
         ) : (
           /* Input Row */
           <div style={{ display: "flex", gap: 10 }}>
@@ -273,43 +291,33 @@ export default function App() {
         )}
 
         {/* Hint */}
-        {!won && (
+        {!won && !revealed && (
           <div style={{ marginTop: 14, color: "#444", fontSize: 12, textAlign: "center" }}>
             {t.hint}
           </div>
         )}
 
         {/* Reveal answer */}
-        {!won && (
+        {!won && !revealed && (
           <div style={{ marginTop: 14, textAlign: "center" }}>
-            {revealed ? (
-              <div style={{
-                fontSize: 14,
-                color: "#888",
-                padding: "8px 0",
-              }}>
-                {t.answerIs(secret.join(""))}
-              </div>
-            ) : (
-              <button onClick={() => setRevealed(true)} style={{
-                background: "transparent",
-                color: "#777",
-                border: "1px dashed #3a3a5a",
-                borderRadius: 8,
-                padding: "7px 18px",
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: "pointer",
-                letterSpacing: 1,
-                fontFamily: "inherit",
-              }}>{t.reveal}</button>
-            )}
+            <button onClick={() => setRevealed(true)} style={{
+              background: "transparent",
+              color: "#777",
+              border: "1px dashed #3a3a5a",
+              borderRadius: 8,
+              padding: "7px 18px",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+              letterSpacing: 1,
+              fontFamily: "inherit",
+            }}>{t.reveal}</button>
           </div>
         )}
       </div>
 
       {/* Restart (during game) */}
-      {!won && history.length > 0 && (
+      {!won && !revealed && history.length > 0 && (
         <button onClick={handleRestart} style={{
           marginTop: 16,
           background: "transparent",
