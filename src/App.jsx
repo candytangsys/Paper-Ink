@@ -14,6 +14,8 @@ const TEXT = {
     guess: "猜！",
     hint: "數字 0–9，四個不重複 · 回傳幾個位置猜對",
     restart: "重新開始",
+    reveal: "公布解答",
+    answerIs: (ans) => (<>答案是 <strong style={{ color: "#fff" }}>{ans}</strong></>),
   },
   en: {
     eyebrow: "NUMBER GUESSING",
@@ -28,6 +30,8 @@ const TEXT = {
     guess: "Guess!",
     hint: "Digits 0–9, four unique · returns how many positions are right",
     restart: "Restart",
+    reveal: "Reveal answer",
+    answerIs: (ans) => (<>The answer is <strong style={{ color: "#fff" }}>{ans}</strong></>),
   },
 };
 
@@ -50,6 +54,7 @@ export default function App() {
   const [input, setInput] = useState("");
   const [history, setHistory] = useState([]);
   const [won, setWon] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const [lang, setLang] = useState("zh");
   const t = TEXT[lang];
   const inputRef = useRef(null);
@@ -85,6 +90,7 @@ export default function App() {
     setSecret(generateSecret());
     setHistory([]);
     setWon(false);
+    setRevealed(false);
     setInput("");
     setTimeout(() => inputRef.current?.focus(), 50);
   }
@@ -270,6 +276,34 @@ export default function App() {
         {!won && (
           <div style={{ marginTop: 14, color: "#444", fontSize: 12, textAlign: "center" }}>
             {t.hint}
+          </div>
+        )}
+
+        {/* Reveal answer */}
+        {!won && (
+          <div style={{ marginTop: 14, textAlign: "center" }}>
+            {revealed ? (
+              <div style={{
+                fontSize: 14,
+                color: "#888",
+                padding: "8px 0",
+              }}>
+                {t.answerIs(secret.join(""))}
+              </div>
+            ) : (
+              <button onClick={() => setRevealed(true)} style={{
+                background: "transparent",
+                color: "#777",
+                border: "1px dashed #3a3a5a",
+                borderRadius: 8,
+                padding: "7px 18px",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                letterSpacing: 1,
+                fontFamily: "inherit",
+              }}>{t.reveal}</button>
+            )}
           </div>
         )}
       </div>
