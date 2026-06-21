@@ -1,3 +1,5 @@
+### 🎮 立即遊玩 / Play now: **https://candytangsys.github.io/guess_number/**
+
 **[中文](#猜數字遊戲) · [English](#guess-the-code)**
 
 ---
