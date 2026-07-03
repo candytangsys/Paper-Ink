@@ -1,138 +1,94 @@
 ### 🎮 立即遊玩 / Play now: **https://candytangsys.github.io/guess_number/**
 
-**[中文](#猜數字遊戲) · [English](#guess-the-code)**
+**[中文](#紙墨集) · [English](#paper--ink)**
 
 ---
 
-# 猜數字遊戲
+# 紙墨集
 
-一款考驗邏輯推理與系統性排除能力的數字解謎遊戲。
-
----
-
-## 遊戲簡介
-
-電腦隨機產生四個**不重複**的數字作為答案，玩家透過不斷猜測與分析回饋，逐步推理出正確答案。
+一個文青紙墨風的小遊戲合輯，從主畫面選擇卷冊進入不同的遊戲，介面支援中英雙語切換。
 
 ---
 
-## 遊戲規則
+## 收錄遊戲
 
-1. 電腦從 0～9 中隨機選出 **4 個不重複的數字**，並排列成固定順序
-2. 玩家每回合輸入一組 4 位數字進行猜測，**猜測可以包含重複數字**
-3. 電腦回傳「**幾個位置猜對**」
-   - 只告知位置正確的數量，**不告知是哪個位置**
-   - **不告知**數字是否存在於答案中
-4. 玩家根據回饋持續猜測，直到 4 個位置全部猜對為止
-
----
-
-## 範例
-
-假設答案為 `3 8 1 6`
-
-| 猜測 | 回饋 | 說明 |
+| 卷冊 | 名稱 | 玩法 |
 |------|------|------|
-| `1111` | 1 個位置對 | 第三位的 `1` 正確（猜測可重複）|
-| `3333` | 1 個位置對 | 第一位的 `3` 正確（猜測可重複）|
-| `3812` | 2 個位置對 | 第一位 `3`、第二位 `8` 正確 |
-| `3816` | 4 個位置對 | 全部正確！ |
+| 第一卷 | **猜數字** | 電腦隨機產生四個不重複的數字，玩家靠邏輯推理與系統性排除猜出答案 |
+| 第二卷 | **一筆連** | Hidato 式數字連線謎題，依序點選或一筆滑過，把 1 連到 N，共 28 關，難度漸增 |
+| 第三卷 | **時感** | 兩種模式的時間感知練習：自己停下計時，或猜猜靜默了多久 |
 
 ---
 
-## 勝利條件
+## 視覺風格
 
-猜出 4 個數字且**順序完全正確**。
+米紙底色配墨褐字，襯線字體（思源宋體 Noto Serif TC ＋ Garamond 家族），質感偏書頁：
 
----
-
-## 攻略提示
-
-- **差異法**：每次只改變一個位置的數字，觀察分數變化
-  - 分數 +1 → 新數字在該位置正確
-  - 分數 -1 → 舊數字在該位置正確
-  - 分數不變 → 兩個都不是該位置的答案
-- **善用重複猜測**：猜 `1111` 可快速確認 `1` 是否出現在某個位置，再配合差異法縮小範圍
-- 先用 `0000`～`9999` 逐一確認哪個數字在哪個位置有出現
-- 再逐一確認每個位置的正確數字
+- 連線／進度採青瓷 → 黛青 → 赭石的水墨漸層
+- 圓圈分素紙空圈、深墨圈（已知線索）、青瓷虛線圈（可下一步），目前位置以朱砂紅標示
+- 背景以淡墨緩緩暈染取代霓虹光暈，動畫皆偏柔和，並支援系統的「減少動態」（`prefers-reduced-motion`）偏好
 
 ---
 
-## 技術資訊
+## 中英雙語
 
-- 答案空間：10 × 9 × 8 × 7 = **5,040 種**可能組合
-- 建議最少步數：約 **10～14 步**可保證解出
+右上角固定顯示語言切換鈕（EN／中），切換後的語言會套用到主畫面與所有遊戲，並保存在瀏覽器中，下次開啟時延續上次的選擇。
 
 ---
 
 ## 開發
 
-使用 React 開發，於 Claude.ai Artifacts 環境運行。
+```bash
+npm install
+npm run dev      # 本機開發伺服器
+npm run build    # 打包至 dist/
+npm run preview  # 預覽打包結果
+```
+
+使用 Vite + React 開發，透過 GitHub Actions 部署到 GitHub Pages。
 
 ---
 ---
 
-# Guess the Code
+# Paper & Ink
 
-A number-deduction puzzle that tests logical reasoning and systematic elimination.
-
----
-
-## Overview
-
-The computer randomly generates four **unique** digits as the secret code. Through repeated guesses and analysis of the feedback, the player gradually deduces the correct answer.
+A small collection of games in a literary "paper and ink" visual style. Pick a chapter from the home screen to jump into a game; every screen supports switching between Chinese and English.
 
 ---
 
-## Rules
+## Games
 
-1. The computer randomly picks **4 unique digits** from 0–9 and arranges them in a fixed order
-2. Each round the player enters a 4-digit guess — **guesses may contain repeated digits**
-3. The computer returns **how many positions are correct**
-   - It only reveals the *count* of correct positions, **not which positions**
-   - It does **not** reveal whether a digit exists in the answer at all
-4. The player keeps guessing based on the feedback until all 4 positions are correct
-
----
-
-## Example
-
-Suppose the answer is `3 8 1 6`
-
-| Guess | Feedback | Notes |
-|-------|----------|-------|
-| `1111` | 1 position correct | The `1` in the third spot is right (repeats allowed) |
-| `3333` | 1 position correct | The `3` in the first spot is right (repeats allowed) |
-| `3812` | 2 positions correct | First `3` and second `8` are right |
-| `3816` | 4 positions correct | All correct! |
+| Chapter | Name | Description |
+|---------|------|--------------|
+| I | **Guess the Code** | The computer picks four unique digits; deduce the answer through logic and systematic elimination |
+| II | **One-Stroke Path** | A Hidato-style number path puzzle — tap or drag to connect 1 through N in one stroke, across 28 levels of rising difficulty |
+| III | **Sense of Time** | Two modes of time perception: stop the clock yourself, or guess how long the silence lasted |
 
 ---
 
-## Win Condition
+## Visual style
 
-Guess all 4 digits **in the exact correct order**.
+Rice-paper background with ink-brown text, set in serif type (Noto Serif TC + the Garamond family), aiming for a page-like texture:
 
----
-
-## Strategy Tips
-
-- **Difference method**: change only one position's digit each turn and watch the score
-  - Score +1 → the new digit is correct in that position
-  - Score −1 → the old digit was correct in that position
-  - Score unchanged → neither is the answer for that position
-- **Use repeated guesses**: guessing `1111` quickly confirms whether `1` appears in some position, then combine with the difference method to narrow down
-- First use `0000`–`9999` to confirm which digits appear and where
-- Then pin down the correct digit for each position one by one
+- Connecting lines / progress use a celadon → indigo-grey → ochre ink-wash gradient
+- Circles come in three states — plain paper, dark ink (known clue), and a dashed celadon ring (next step) — with the current position marked in vermillion red
+- A faint, slowly drifting ink wash replaces neon glow in the background; all animation is gentle and respects the system's "reduce motion" (`prefers-reduced-motion`) preference
 
 ---
 
-## Technical Notes
+## Bilingual support
 
-- Answer space: 10 × 9 × 8 × 7 = **5,040 possible combinations**
-- Recommended minimum: about **10–14 guesses** guarantees a solution
+A language toggle (EN / 中) sits in the top-right corner on every screen. Switching applies across the home screen and all games, and the choice is remembered in the browser for next time.
 
 ---
 
 ## Development
 
-Built with React, running in the Claude.ai Artifacts environment.
+```bash
+npm install
+npm run dev      # local dev server
+npm run build    # bundle to dist/
+npm run preview  # preview the production build
+```
+
+Built with Vite + React, deployed to GitHub Pages via GitHub Actions.
