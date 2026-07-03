@@ -1,4 +1,4 @@
-### 🎮 立即遊玩 / Play now: **https://candytangsys.github.io/guess_number/**
+### 🎮 立即遊玩 / Play now: **https://candytangsys.github.io/game/**
 
 **[中文](#紙墨集) · [English](#paper--ink)**
 
