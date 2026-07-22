@@ -7,13 +7,13 @@ const HEIGHT = 1350;
 const SHARE_TEXT = {
   zh: {
     brand: "紙墨筆・一筆連",
-    daily: (n) => `每日挑戰 #${n}`,
+    daily: "每日挑戰",
     perfect: "完",
     streak: (n) => `連續 ${n} 天`,
   },
   en: {
     brand: "Paper & Ink",
-    daily: (n) => `One-Stroke Daily #${n}`,
+    daily: "One-Stroke Daily",
     perfect: "PERFECT",
     streak: (n) => `${n}-day streak`,
   },
@@ -92,7 +92,7 @@ function drawPerfectStamp(ctx, label) {
   ctx.restore();
 }
 
-export async function renderShareImage({ dailyNo, size, timeSec, perfect, streak, solution, lang = "zh" }) {
+export async function renderShareImage({ size, timeSec, perfect, streak, solution, lang = "zh" }) {
   const T = SHARE_TEXT[lang];
   const canvas = document.createElement("canvas");
   canvas.width = WIDTH;
@@ -128,7 +128,7 @@ export async function renderShareImage({ dailyNo, size, timeSec, perfect, streak
   // title
   ctx.fillStyle = COLORS.ink;
   ctx.font = "600 74px 'Noto Serif TC', serif";
-  ctx.fillText(T.daily(dailyNo), WIDTH / 2, 250);
+  ctx.fillText(T.daily, WIDTH / 2, 250);
 
   // path thumbnail
   const boxSize = WIDTH * 0.62;

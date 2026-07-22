@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Undo2, Lightbulb, Timer, Feather, Home, Share2, Flame } from "lucide-react";
+import { Undo2, Lightbulb, RotateCcw, Timer, Feather, Home, Share2, Flame } from "lucide-react";
 import { COLORS, inkWashStyle, homeBtnStyle, brandRowStyle, eyebrowStyle } from "../theme.jsx";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "../components/LangToggle.jsx";
 import Board from "./numberlink/Board.jsx";
 import { useGameSession } from "./numberlink/useGameSession.js";
 import { buildDailyPuzzle } from "../engine/daily.mjs";
-import { fmtTime, dailyNumber } from "../engine/share.mjs";
+import { fmtTime } from "../engine/share.mjs";
 import { createStreakStore } from "../engine/streak.mjs";
 import { getDailyEntry, recordDailyCompletion } from "../dailyHistory.js";
 import { todayUTCString } from "../dateUtil.js";
@@ -19,13 +19,15 @@ const TEXT = {
   zh: {
     home: "主畫面",
     brandTag: "Daily · Ink · Path",
-    dailyTitle: (n) => `每日挑戰 #${n}`,
+    dailyTitle: "每日挑戰",
     loading: "研墨中…",
     reviewBanner: "僅供回顧・不列入連續紀錄",
     nextStroke: (n) => `下一筆　${n}`,
     solved: "一筆連成",
     undo: "回退",
     hintBtn: "提示",
+    retry: "重來",
+    hintStuck: "目前走法已經無法完成，試試回退或重來一次",
     steps: (n) => `${n} 步`,
     mistakes: (n) => `${n} 失誤`,
     mistakesLabel: (n) => (n === 0 ? "零失誤" : `${n} 次失誤`),
@@ -45,13 +47,15 @@ const TEXT = {
   en: {
     home: "Home",
     brandTag: "Daily · Ink · Path",
-    dailyTitle: (n) => `Daily Challenge #${n}`,
+    dailyTitle: "Daily Challenge",
     loading: "Grinding ink…",
     reviewBanner: "Archive only · doesn't count toward your streak",
     nextStroke: (n) => `Next stroke　${n}`,
     solved: "Solved in one stroke",
     undo: "Undo",
     hintBtn: "Hint",
+    retry: "Retry",
+    hintStuck: "This path can't be completed anymore — try undo or retry",
     steps: (n) => `${n} moves`,
     mistakes: (n) => `${n} mistakes`,
     mistakesLabel: (n) => (n === 0 ? "No mistakes" : `${n} mistakes`),
@@ -75,7 +79,6 @@ export default function Daily({ date, onExit }) {
   const t = TEXT[lang];
   const today = todayUTCString();
   const isToday = date === today;
-  const dailyNo = dailyNumber(date);
 
   const streakStore = useMemo(() => createStreakStore(window.localStorage), []);
   // Derived fresh from storage on every date change (a plain useState
@@ -132,7 +135,7 @@ export default function Daily({ date, onExit }) {
 
   const session = useGameSession({
     onWin: handleWin,
-    onHintUsed: () => track("hint_used", { context: "daily" }),
+    onHintUsed: (info) => track("hint_used", { context: "daily", salvageable: info?.salvageable }),
     onUndoUsed: () => track("undo_used", { context: "daily" }),
   });
 
@@ -240,7 +243,7 @@ export default function Daily({ date, onExit }) {
           <Feather size={18} color={COLORS.vermillion} />
           <span style={eyebrowStyle}>{t.brandTag}</span>
         </div>
-        <h1 style={styles.title}>{t.dailyTitle(dailyNo)}</h1>
+        <h1 style={styles.title}>{t.dailyTitle}</h1>
         {!isToday && <p style={styles.reviewBanner}>{t.reviewBanner}</p>}
 
         {showRescueBanner && (
@@ -266,7 +269,10 @@ export default function Daily({ date, onExit }) {
 }
 
 function GameArea({ session, t }) {
-  const { puzzle, filledOrder, filledSet, candidateSet, taps, mistakes, elapsed, won, shakeKey, advanceTo, undo, hint } = session;
+  const {
+    puzzle, filledOrder, filledSet, candidateSet, taps, mistakes, elapsed, won,
+    shakeKey, hintCell, hintStuck, restart, advanceTo, undo, hint,
+  } = session;
   if (!puzzle) return null;
   const nextNum = filledOrder.length + 1;
 
@@ -279,6 +285,8 @@ function GameArea({ session, t }) {
         <StatPill label={t.mistakes(mistakes)} warn={mistakes > 0} />
       </div>
 
+      {hintStuck && <div style={styles.hintStuckBanner}>{t.hintStuck}</div>}
+
       <Board
         puzzle={puzzle}
         filledOrder={filledOrder}
@@ -286,6 +294,7 @@ function GameArea({ session, t }) {
         candidateSet={candidateSet}
         won={won}
         shakeKey={shakeKey}
+        hintCell={hintCell}
         onCellClick={advanceTo}
       />
 
@@ -297,6 +306,10 @@ function GameArea({ session, t }) {
         <button onClick={hint} style={styles.controlBtn} disabled={won}>
           <Lightbulb size={16} />
           <span>{t.hintBtn}</span>
+        </button>
+        <button onClick={restart} style={styles.controlBtn} disabled={filledOrder.length === 0 || won}>
+          <RotateCcw size={16} />
+          <span>{t.retry}</span>
         </button>
       </div>
     </>
@@ -421,6 +434,19 @@ const styles = {
     gap: 10,
     marginBottom: 20,
   },
+  hintStuckBanner: {
+    marginTop: -10,
+    marginBottom: 16,
+    padding: "8px 14px",
+    borderRadius: 4,
+    background: "rgba(178,58,46,0.08)",
+    border: "1px solid rgba(178,58,46,0.3)",
+    fontSize: 12.5,
+    color: "#B23A2E",
+    fontFamily: "'Noto Serif TC', serif",
+    letterSpacing: 1,
+    textAlign: "center",
+  },
   statPill: {
     display: "flex",
     alignItems: "center",
@@ -436,6 +462,8 @@ const styles = {
   },
   controlsRow: {
     display: "flex",
+    flexWrap: "wrap",
+    justifyContent: "center",
     gap: 12,
   },
   controlBtn: {

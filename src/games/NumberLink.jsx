@@ -24,6 +24,7 @@ const TEXT = {
     mistakes: (n) => `${n} 失誤`,
     mistakesLabel: (n) => (n === 0 ? "零失誤" : `${n} 次失誤`),
     bestRecord: (time, mistakes) => `最佳紀錄 ${time} · ${mistakes}`,
+    hintStuck: "目前走法已經無法完成，試試回退或重來一次",
     playAgain: "再玩一次",
     nextLevel: "下一關",
     backToMenu: "返回主畫面",
@@ -43,6 +44,7 @@ const TEXT = {
     mistakes: (n) => `${n} mistakes`,
     mistakesLabel: (n) => (n === 0 ? "No mistakes" : `${n} mistakes`),
     bestRecord: (time, mistakes) => `Best ${time} · ${mistakes}`,
+    hintStuck: "This path can't be completed anymore — try undo or retry",
     playAgain: "Play again",
     nextLevel: "Next level",
     backToMenu: "Back to Home",
@@ -281,7 +283,7 @@ export default function NumberLink({ onExit, initialLevel = null }) {
 
   const session = useGameSession({
     onWin: handleWin,
-    onHintUsed: () => track("hint_used", { context: "tutorial" }),
+    onHintUsed: (info) => track("hint_used", { context: "tutorial", salvageable: info?.salvageable }),
     onUndoUsed: () => track("undo_used", { context: "tutorial" }),
   });
 
@@ -336,7 +338,7 @@ export default function NumberLink({ onExit, initialLevel = null }) {
         onRegenerate={regenerate}
         onBack={onExit}
         onNextLevel={() => startLevel(Math.min(LEVELS.length, levelIndex + 1))}
-        onReplay={() => startLevel(levelIndex)}
+        onReplay={session.restart}
         hasNextLevel={levelIndex < LEVELS.length}
         t={t}
       />
@@ -347,7 +349,10 @@ export default function NumberLink({ onExit, initialLevel = null }) {
 /* ---------- screens ---------- */
 
 function GameScreen({ levelIndex, session, best, variant, onRegenerate, onBack, onNextLevel, onReplay, hasNextLevel, t }) {
-  const { puzzle, filledOrder, filledSet, candidateSet, taps, mistakes, elapsed, won, shakeKey, advanceTo, undo, hint } = session;
+  const {
+    puzzle, filledOrder, filledSet, candidateSet, taps, mistakes, elapsed, won,
+    shakeKey, hintCell, hintStuck, advanceTo, undo, hint,
+  } = session;
   if (!puzzle) return null;
   const nextNum = filledOrder.length + 1;
   const showControls = levelIndex >= CONTROLS_UNLOCK_LEVEL;
@@ -375,6 +380,7 @@ function GameScreen({ levelIndex, session, best, variant, onRegenerate, onBack, 
       </div>
 
       {abHint && <div style={styles.abHint}>{abHint}</div>}
+      {hintStuck && <div style={styles.hintStuckBanner}>{t.hintStuck}</div>}
 
       <Board
         puzzle={puzzle}
@@ -383,6 +389,7 @@ function GameScreen({ levelIndex, session, best, variant, onRegenerate, onBack, 
         candidateSet={candidateSet}
         won={won}
         shakeKey={shakeKey}
+        hintCell={hintCell}
         onCellClick={advanceTo}
       />
 
@@ -526,6 +533,19 @@ const styles = {
     fontFamily: "'EB Garamond', serif",
     letterSpacing: 1,
     color: "#5A564C",
+  },
+  hintStuckBanner: {
+    marginTop: -10,
+    marginBottom: 16,
+    padding: "8px 14px",
+    borderRadius: 4,
+    background: "rgba(178,58,46,0.08)",
+    border: "1px solid rgba(178,58,46,0.3)",
+    fontSize: 12.5,
+    color: "#B23A2E",
+    fontFamily: "'Noto Serif TC', serif",
+    letterSpacing: 1,
+    textAlign: "center",
   },
   abHint: {
     marginTop: -10,

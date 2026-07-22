@@ -18,17 +18,83 @@ const DIRS_8 = [
   [1, 1], [1, -1], [-1, 1], [-1, -1],
 ];
 
+// Given the player's current (possibly off-solution) path, searches for
+// *any* legal way to fill the rest of the board — not just the original
+// canonical `puzzle.path` — so hint stays correct even after the player
+// has wandered onto a different valid route than the one the puzzle was
+// generated from. Same Warnsdorff-ordered backtracking as the generators
+// in NumberLink.jsx/daily.mjs, just seeded from the current head and
+// constrained to hit each remaining clue at its exact step number.
+// Returns the full completed path, `null` if the position is provably a
+// dead end, or "unknown" if the search couldn't decide within budget.
+function findCompletion(puzzle, order, stepBudget = 150000) {
+  const { n, total, clueMap } = puzzle;
+  const visited = new Set(order.map(([r, c]) => `${r}_${c}`));
+  const path = order.slice();
+  let steps = 0;
+
+  function neighborsOf(r, c) {
+    const res = [];
+    for (const [dr, dc] of DIRS_8) {
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < n && nc >= 0 && nc < n) {
+        const key = `${nr}_${nc}`;
+        if (!visited.has(key)) res.push([nr, nc]);
+      }
+    }
+    return res;
+  }
+
+  function dfs(r, c, depth) {
+    steps++;
+    if (steps > stepBudget) return "TIMEOUT";
+    if (depth === total) return true;
+
+    const candidates = neighborsOf(r, c).filter(([nr, nc]) => {
+      const clueVal = clueMap[`${nr}_${nc}`];
+      return clueVal === undefined || clueVal === depth + 1;
+    });
+    const scored = candidates.map((p) => ({ p, deg: neighborsOf(p[0], p[1]).length }));
+    for (let i = scored.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [scored[i], scored[j]] = [scored[j], scored[i]];
+    }
+    scored.sort((a, b) => a.deg - b.deg);
+
+    for (const { p } of scored) {
+      const key = `${p[0]}_${p[1]}`;
+      visited.add(key);
+      path.push(p);
+      const res = dfs(p[0], p[1], depth + 1);
+      if (res === true) return true;
+      if (res === "TIMEOUT") return "TIMEOUT";
+      visited.delete(key);
+      path.pop();
+    }
+    return false;
+  }
+
+  const [hr, hc] = order[order.length - 1];
+  const result = dfs(hr, hc, order.length);
+  if (result === true) return path;
+  if (result === "TIMEOUT") return "unknown";
+  return null;
+}
+
 export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
   const [puzzle, setPuzzleState] = useState(null);
   const [filledOrder, setFilledOrder] = useState([]);
   const pathRef = useRef([]);
   const [taps, setTaps] = useState(0);
   const [mistakes, setMistakes] = useState(0);
+  const [hints, setHints] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [won, setWon] = useState(false);
   const wonRef = useRef(false);
   const [shakeKey, setShakeKey] = useState(null);
   const shakeTimeout = useRef(null);
+  const [hintCell, setHintCell] = useState(null);
+  const [hintStuck, setHintStuck] = useState(false);
   const timerRef = useRef(null);
   const puzzleRef = useRef(null);
 
@@ -54,6 +120,8 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
   const setPath = useCallback((next) => {
     pathRef.current = next;
     setFilledOrder(next);
+    setHintCell(null);
+    setHintStuck(false);
   }, []);
 
   const start = useCallback((newPuzzle) => {
@@ -63,10 +131,20 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     setFilledOrder([]);
     setTaps(0);
     setMistakes(0);
+    setHints(0);
     setElapsed(0);
+    setHintCell(null);
+    setHintStuck(false);
     wonRef.current = false;
     setWon(false);
   }, []);
+
+  // Resets progress on the *same* puzzle instance (no regeneration) — used
+  // by "play again"/"retry" so a retry is actually a retry, not a new
+  // random board.
+  const restart = useCallback(() => {
+    if (puzzleRef.current) start(puzzleRef.current);
+  }, [start]);
 
   /* timer */
   useEffect(() => {
@@ -155,16 +233,45 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     onUndoUsedRef.current && onUndoUsedRef.current();
   }, [setPath]);
 
+  // Marks (doesn't auto-place) the correct next cell so the player still
+  // makes the move themselves. First checks whether the player's actual
+  // current path can still be completed at all — following the original
+  // canonical solution blindly would occasionally point at a cell that's
+  // no longer reachable once the player has taken a different-but-valid
+  // route, which is worse than useless. If nothing can complete the
+  // position, says so instead of guessing.
   const hint = useCallback(() => {
     const puzzle = puzzleRef.current;
     if (!puzzle || wonRef.current) return;
-    const nextNum = pathRef.current.length + 1;
+    const order = pathRef.current;
+    const nextNum = order.length + 1;
     if (nextNum > puzzle.total) return;
-    const [r, c] = puzzle.path[nextNum - 1];
-    setMistakes((m) => m + 1);
-    onHintUsedRef.current && onHintUsedRef.current();
-    advanceTo(r, c);
-  }, [advanceTo]);
+
+    let nextCell;
+    if (order.length === 0) {
+      nextCell = puzzle.path[0];
+    } else {
+      const canonicalPrefix = puzzle.path.slice(0, order.length);
+      const onCanonical = order.every(([r, c], i) => canonicalPrefix[i][0] === r && canonicalPrefix[i][1] === c);
+      if (onCanonical) {
+        nextCell = puzzle.path[nextNum - 1];
+      } else {
+        const completion = findCompletion(puzzle, order);
+        if (completion === null || completion === "unknown") {
+          setHintCell(null);
+          setHintStuck(true);
+          onHintUsedRef.current && onHintUsedRef.current({ salvageable: false });
+          return;
+        }
+        nextCell = completion[nextNum - 1];
+      }
+    }
+
+    setHintStuck(false);
+    setHintCell(`${nextCell[0]}_${nextCell[1]}`);
+    setHints((h) => h + 1);
+    onHintUsedRef.current && onHintUsedRef.current({ salvageable: true });
+  }, []);
 
   /* derived candidate cells (valid next taps) for gentle highlighting */
   const candidateSet = useMemo(() => {
@@ -192,10 +299,14 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     candidateSet,
     taps,
     mistakes,
+    hints,
     elapsed,
     won,
     shakeKey,
+    hintCell,
+    hintStuck,
     start,
+    restart,
     advanceTo,
     undo,
     hint,

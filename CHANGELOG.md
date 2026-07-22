@@ -1,5 +1,28 @@
 # CHANGELOG
 
+## v1.8 — Hint correctness, same-puzzle retry, daily-number cleanup
+
+Four issues from playtesting, all traced to root cause before fixing.
+
+### Fixed
+
+- **Hint could point at an unreachable cell.** `useGameSession.js`'s `hint()` used to blindly reveal `puzzle.path[nextNum-1]` — the *original* canonical solution's next cell — regardless of whether the player's actual taps still matched that solution's prefix. Once a player took a different-but-valid route (this puzzle style can have more than one Hamiltonian path satisfying the same clues), the revealed cell could be non-adjacent to their current head, and `advanceTo` would reject it as a mistake: a "hint" that actively hurt. `hint()` now checks whether the current path is still on the canonical prefix (cheap, the common case) and, if not, runs a constrained Warnsdorff-ordered backtracking search (`findCompletion`, same style as the puzzle generators) from the player's actual head to find *any* valid completion. If none exists, it says so instead of guessing (a new `hintStuck` banner: "目前走法已經無法完成，試試回退或重來一次" / "This path can't be completed anymore — try undo or retry").
+- **Hint no longer auto-fills the cell for you, and no longer counts as a "mistake."** It now only marks the correct next cell (`Board.jsx`'s new amber `isHintTarget` highlight) — the player still has to tap it — and is tracked in its own `hints` counter instead of inflating `mistakes`, which previously made using a hint look and feel like an error.
+- **Regular-level retry always gave a different puzzle.** `NumberLink.jsx`'s win-screen "再玩一次" called the same `startLevel()` as the header's "重新出題," so both regenerated a brand-new random board — there was never a way to retry the exact level you'd just played. `useGameSession` gained `restart()` (resets progress on the *same* puzzle instance, no regeneration); "再玩一次" now calls it, while the header regenerate button is unchanged and still deals a new random board on purpose.
+- **Daily Challenge had no way to reset an in-progress attempt.** Regenerating a new puzzle is correctly absent from Daily (would spoil the day's fixed puzzle — see v-P0 notes), but that had also ruled out a plain "clear my current taps and start today's puzzle over," which doesn't leak anything since it's the same puzzle. `Daily.jsx` now has a "重來" button next to Undo/Hint, wired to the same `session.restart()`.
+
+### Changed
+
+- **Removed the Daily Challenge day counter (`#N`).** `dailyNumber()` counted from a hardcoded epoch (`2026-08-01`, the planned launch date) — before that date, every day shows a negative/nonsensical number (e.g. `#-9` on 2026-07-22, 10 days pre-launch). Rather than special-case the pre-launch display, removed the feature entirely per product decision: `dailyNumber()`/`dailyNo` deleted from `share.mjs`, `Daily.jsx`'s title, `Home.jsx`'s scroll-card badge, `shareFlow.js`, and `shareImage.js`'s share-card text — the Daily title/share text now just reads "每日挑戰" / "Daily Challenge" with no number.
+
+### Verification
+
+- `npm test` — 24/24 passing (dropped the now-obsolete `dailyNumber` test, updated `buildShareText` call sites to drop the `dailyNo` param).
+- `npm run build` — succeeds.
+- Manually driven in headless Chromium (Playwright): hint marks (doesn't fill) the next cell without moving the mistake/step counters; "再玩一次" reproduces the identical clue layout just solved while the header's "重新出題" still produces a different one; Daily Challenge title and Home's scroll card both show no `#N`; Daily's new "重來" button clears taps/timer while keeping the same day's clue layout.
+
+---
+
 ## v1.7 — Product rename: 紙墨集 → 紙墨筆
 
 CEO-confirmed scope decision: the product is now a single-game app (一筆連), not a mini-games collection — `GuessNumber.jsx` / `TimeSense.jsx` were already removed in v1.2 and were never part of P0's financial modeling, KPIs, or acquisition strategy, so this rename doesn't touch any of that. "紙墨集" ("Paper & Ink **Collection**") implied a multi-game anthology; "紙墨筆" ("Paper, Ink, **Brush**") echoes 一筆連's core "one-stroke" mechanic instead and fits the now-confirmed single-game positioning.

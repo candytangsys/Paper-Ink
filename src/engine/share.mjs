@@ -9,18 +9,18 @@ function inkThumb(size) {
   return size <= 8 ? row : row + "…";
 }
 
-export function buildShareText({ date, dailyNo, size, timeSec, perfect, streak, lang = "zh" }) {
+export function buildShareText({ date, size, timeSec, perfect, streak, lang = "zh" }) {
   const t = fmtTime(timeSec);
   if (lang === "zh") {
     return [
-      `紙墨筆・一筆連 每日挑戰 #${dailyNo}`,
+      `紙墨筆・一筆連 每日挑戰`,
       `${size}×${size}｜${t}${perfect ? "｜🖋 一筆連成・完美" : ""}`,
       streak >= 2 ? `🔥 連續 ${streak} 天` : null,
       inkThumb(size),
     ].filter(Boolean).join("\n");
   }
   return [
-    `Paper & Ink · One-Stroke Daily #${dailyNo}`,
+    `Paper & Ink · One-Stroke Daily`,
     `${size}×${size} | ${t}${perfect ? " | 🖋 Perfect" : ""}`,
     streak >= 2 ? `🔥 ${streak}-day streak` : null,
     inkThumb(size),
@@ -33,8 +33,4 @@ export function buildShareUrl({ baseUrl, date, refId }) {
   u.searchParams.set("utm_source", "share");
   u.searchParams.set("ref", refId);
   return u.toString();
-}
-
-export function dailyNumber(dateStr, epoch = "2026-08-01") {
-  return Math.round((new Date(dateStr) - new Date(epoch)) / 86400000) + 1;
 }

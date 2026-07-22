@@ -4,7 +4,7 @@ import { useLanguage } from "../i18n.jsx";
 import LangToggle from "./LangToggle.jsx";
 import { HOME_COLORS, HOME_FONT_SERIF, HOME_FONT_SANS, HOME_FONT_MONO } from "../homeTheme.js";
 import { WEEK_SCHEDULE } from "../engine/daily.mjs";
-import { dailyNumber, fmtTime } from "../engine/share.mjs";
+import { fmtTime } from "../engine/share.mjs";
 import { createStreakStore } from "../engine/streak.mjs";
 import { getDailyEntry, loadDailyHistory } from "../dailyHistory.js";
 import { todayUTCString } from "../dateUtil.js";
@@ -23,7 +23,6 @@ const TEXT = {
   zh: {
     brand: "紙墨筆",
     dailyEyebrow: (weekday) => `${weekday} · 今日挑戰`,
-    dailyNo: (n) => `#${String(n).padStart(2, "0")}`,
     clues: "線索",
     best: "最快",
     doneBadge: "今日已完成",
@@ -34,7 +33,6 @@ const TEXT = {
   en: {
     brand: "Paper & Ink",
     dailyEyebrow: (weekday) => `${weekday} · Daily Challenge`,
-    dailyNo: (n) => `#${String(n).padStart(2, "0")}`,
     clues: "Clues",
     best: "Best",
     doneBadge: "Completed today",
@@ -78,7 +76,6 @@ export default function Home({ onSelect }) {
     const entry = getDailyEntry(today);
     const status = createStreakStore(window.localStorage).status(today);
     return {
-      no: dailyNumber(today),
       size: sched.size,
       clueCount: Math.max(2, Math.round(sched.size * sched.size * sched.clueRatio)),
       total: sched.size * sched.size,
@@ -115,7 +112,6 @@ export default function Home({ onSelect }) {
             <div style={styles.scrollTitle}>
               {daily.size} × {daily.size}
             </div>
-            <div style={styles.scrollDailyNo}>{t.dailyNo(daily.no)}</div>
           </div>
           <div style={styles.scrollMeta}>
             <span>
@@ -281,9 +277,8 @@ const styles = {
     textTransform: "uppercase",
     marginBottom: 10,
   },
-  scrollTitleRow: { display: "flex", alignItems: "baseline", justifyContent: "space-between" },
+  scrollTitleRow: { display: "flex", alignItems: "baseline" },
   scrollTitle: { fontFamily: HOME_FONT_SERIF, fontSize: 30, fontWeight: 700 },
-  scrollDailyNo: { fontFamily: HOME_FONT_MONO, fontSize: 13, color: HOME_COLORS.inkFaint },
   scrollMeta: {
     display: "flex",
     gap: 14,

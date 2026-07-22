@@ -1,4 +1,4 @@
-import { buildShareText, buildShareUrl, dailyNumber } from "../engine/share.mjs";
+import { buildShareText, buildShareUrl } from "../engine/share.mjs";
 import { createRefIdStore } from "../engine/refId.mjs";
 import { renderShareImage } from "./shareImage.js";
 import { track } from "../analytics.js";
@@ -7,15 +7,14 @@ import { track } from "../analytics.js";
 // clipboard copy of the text + link when the platform can't share files —
 // or has no Web Share API at all (most desktop browsers).
 export async function shareDaily({ date, size, timeSec, perfect, streak, solution, lang }) {
-  const dailyNo = dailyNumber(date);
   const refId = createRefIdStore(window.localStorage).getOrCreate();
   const baseUrl = `${window.location.origin}${import.meta.env.BASE_URL}`;
   const url = buildShareUrl({ baseUrl, date, refId });
-  const text = buildShareText({ date, dailyNo, size, timeSec, perfect, streak, lang });
+  const text = buildShareText({ date, size, timeSec, perfect, streak, lang });
 
   let file = null;
   try {
-    const blob = await renderShareImage({ dailyNo, size, timeSec, perfect, streak, solution, lang });
+    const blob = await renderShareImage({ size, timeSec, perfect, streak, solution, lang });
     if (blob) file = new File([blob], "paper-ink-daily.png", { type: "image/png" });
   } catch {
     /* canvas unavailable, share text-only */

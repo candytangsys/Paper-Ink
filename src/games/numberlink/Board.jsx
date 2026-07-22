@@ -26,6 +26,7 @@ export default function Board({
   candidateSet,
   won,
   shakeKey,
+  hintCell,
   onCellClick,
 }) {
   const n = puzzle.n;
@@ -197,6 +198,7 @@ export default function Board({
           const isFilled = filledSet.has(key);
           const isClueOnly = !isFilled && puzzle.clueMap[key] !== undefined;
           const isCandidate = candidateSet.has(key);
+          const isHintTarget = hintCell === key && !isFilled;
           const isHead =
             isFilled && filledOrder.length > 0 &&
             filledOrder[filledOrder.length - 1][0] === r &&
@@ -218,6 +220,12 @@ export default function Board({
             boxShadow = isHead
               ? `0 0 0 3px rgba(178,58,46,0.85), 0 2px 8px rgba(43,42,40,0.25)`
               : `0 1px 4px rgba(43,42,40,0.18)`;
+          } else if (isHintTarget) {
+            bg = "rgba(184,146,90,0.18)";
+            border = "2px solid #B8925A";
+            color = "#8B6A32";
+            fontWeight = 700;
+            boxShadow = "0 0 0 4px rgba(184,146,90,0.22)";
           } else if (isClueOnly) {
             bg = "#E7DBBF";
             border = "1.5px solid rgba(43,42,40,0.5)";
@@ -235,7 +243,7 @@ export default function Board({
               onClick={(e) => {
                 if (e.detail === 0) onCellClick(r, c);
               }}
-              className={isShaking ? "ink-shake" : isCandidate ? "ink-pulse" : ""}
+              className={isShaking ? "ink-shake" : isHintTarget || isCandidate ? "ink-pulse" : ""}
               style={{
                 ...styles.cell,
                 width: cellSize,
