@@ -1,5 +1,99 @@
 # CHANGELOG
 
+## v1.7 — Product rename: 紙墨集 → 紙墨筆
+
+CEO-confirmed scope decision: the product is now a single-game app (一筆連), not a mini-games collection — `GuessNumber.jsx` / `TimeSense.jsx` were already removed in v1.2 and were never part of P0's financial modeling, KPIs, or acquisition strategy, so this rename doesn't touch any of that. "紙墨集" ("Paper & Ink **Collection**") implied a multi-game anthology; "紙墨筆" ("Paper, Ink, **Brush**") echoes 一筆連's core "one-stroke" mechanic instead and fits the now-confirmed single-game positioning.
+
+### Changed
+
+- **Brand name, everywhere it appears in-product**: `index.html` `<title>`, `README.md` (heading + anchor link), the PWA manifest (`vite.config.js`'s `name` / `short_name`), the boot `LoadingScreen.jsx` title, `Home.jsx`'s header wordmark, `InstallBanner.jsx`'s install prompt, the Daily Challenge share text (`share.mjs`) and share-card image (`shareImage.js`).
+- **PWA manifest `description`** (`vite.config.js`): also dropped the stale "小遊戲合輯" (mini-games collection) framing while touching this file for the rename, since it directly contradicted the now-confirmed single-game positioning — not just a name swap, flagging it as a slightly bigger edit than the rest of this pass. Now: "文青紙墨風的一筆連數字路徑謎题，含每日挑戰".
+
+### Not changed (pending your decision)
+
+- **The seal-mark character** (`Home.jsx`'s `sealDot`, currently "紙") — left as-is per your note that this is still undecided. Easy one-line swap to "筆" once you call it; nothing else depends on this file's current character.
+- Old CHANGELOG entries below (P0, v1.2) still say "紙墨集" — left untouched as a historical record of what those specs were called at the time, not revised to match the new name.
+
+### Verification
+
+- `npm test` — 25/25 passing.
+- `npm run build` — succeeds; confirmed `dist/manifest.webmanifest`'s `name`/`short_name`/`description` fields all reflect the new name and positioning.
+- Manually verified in headless Chromium (Playwright): browser tab title and Home's header wordmark both read "紙墨筆"; seal icon still shows "紙" as expected.
+
+---
+
+## v1.6 — Removed 一筆連's orphaned internal level-select screen
+
+Follow-up to v1.5: with the back button now exiting straight to Home, `NumberLink.jsx`'s own level-select screen (`MenuScreen`) had no path left that reached it in normal use — Home's grid has been the sole level entry point since v1.3, always deep-linking a specific level. Rather than leave dead UI behind a URL nobody links to, it's deleted.
+
+### Removed
+
+- `MenuScreen` and its 28-card level grid, along with the styles, icons (`Lock`, `Check`, `Home`), and text strings (`title`, `subtitle`, `hint`, `tier`, `brandTag`, `home`) that existed only to support it. `difficultyTier()` (only used to color that grid's tier dots) removed too. Home's own level grid already covers this — same 28 levels, same locked/done states, one less place for the two to drift out of sync.
+
+### Changed
+
+- `NumberLink.jsx` no longer has `screen` ('menu' | 'game') state — it always renders the game screen now. The URL-driven auto-start effect gained an else-branch: if the requested level is missing, out of range, or still locked, it calls `onExit()` to bounce back to Home instead of falling back to the now-deleted menu. This also means a stale or hand-typed link to a locked level (or the bare `#/number-link` with no level) redirects to Home instead of silently showing a level browser.
+
+### Verification
+
+- `npm test` — 25/25 passing.
+- `npm run build` — succeeds (bundle ~4 KB smaller from the removed dead code).
+- Manually driven in headless Chromium (Playwright): bare `#/number-link` → redirects to Home; a locked level's deep link → redirects to Home; Home → level 1 → still enters directly; back arrow → still returns to Home; full play-through (win level 1 → advance to level 2) still works end-to-end.
+
+---
+
+## v1.5 — Level back button now returns to Home
+
+### Fixed
+
+- **Pressing back during a level didn't return to 主畫面.** `src/games/NumberLink.jsx`'s in-game back arrow (and the "back" button shown on the win screen after the last level) called `setScreen("menu")`, landing on 一筆連's own internal level-select screen instead of the app's Home screen. That internal menu is only reachable that way now — since v1.3, Home's level grid always deep-links straight into a specific level (`initialLevel`), so nothing routes through it as an intermediate step anymore. Both buttons now call `onExit` (navigates to `#/`) instead, matching what a player expects after entering a level directly from Home. Labels updated accordingly: "返回關卡選單" / "Back to level menu" → "返回主畫面" / "Back to Home", "返回選單" / "Back to menu" → "返回主畫面" / "Back to Home".
+
+### Verification
+
+- `npm test` — 25/25 passing.
+- `npm run build` — succeeds.
+- Manually verified in headless Chromium (Playwright): Home → level 1 → back arrow → lands back on Home (`#/`, level grid visible) instead of the level-select menu.
+
+---
+
+## v1.4 — Gameplay screens reskinned to F7 palette; refined share stamp
+
+CEO-directed follow-up to v1.3: closes the visual gap where 一筆連 (tutorial + Daily Challenge) still read as the pre-F7 app while Home/Loading had moved on to the new palette, and upgrades the share card's "perfect" stamp to the agreed spec. Home's own breakpoint strategy (fluid, no fixed breakpoints) and the 16×16 Daily board's narrow-screen handling (shrink cells, no horizontal scroll) were both confirmed as already correct — no change needed there.
+
+### Changed
+
+- **Gameplay screens now use the F7 palette.** `theme.jsx`'s `COLORS` (paper/panel/ink/inkSoft/faint/border/vermillion) is realigned to `homeTheme.js`'s `HOME_COLORS` hex-for-hex, and every hardcoded duplicate of the old palette in `NumberLink.jsx`, `Daily.jsx`, and `numberlink/Board.jsx` (~90 literal hex/rgba occurrences — most of the app's chrome was never actually routed through the `COLORS` constant) was mapped to its new-palette equivalent: paper/panel/ink/text tones 1:1, 朱砂紅 accent → 印章紅 (seal), and two judgment-call remaps for tones with no direct F7 token — the "done/record" indigo-grey accent → 竹青 (bamboo, matching Home's own "done" color) and the difficulty-tier gold-brown → 赭金 (gold). The ink-trail path gradient (celadon → indigo-grey → ochre) and the candidate-highlight teal are unchanged — they're decorative/functional, not surface chrome, and have no equivalent in `HOME_COLORS`. `homeTheme.js`'s header comment updated to note it's no longer scoped to Home-only (supersedes architecture constraint §5.5).
+- **Share card "perfect" stamp** (`src/daily/shareImage.js`): now a rounded-corner square (12px radius) with a thin 2.5px stroke (was a sharp-cornered 6px block) and a randomized ±3–5° tilt per share (was a fixed −6.9°, outside the agreed range and identical on every card) — reads as a hand-stamped seal instead of a template.
+
+### Verification
+
+- `npm test` — 25/25 passing.
+- `npm run build` — succeeds.
+- Manually compared in headless Chromium (Playwright) across Home, the level-select menu, an in-game board, and the Daily Challenge screen — all four now share one consistent paper/ink/seal palette.
+
+---
+
+## v1.3 — Home level grid now enters levels directly
+
+Fixes a broken interaction the F7 home redesign shipped with: tapping a level number in the "常規關卡" grid navigated to 一筆連's level-select menu instead of the level itself.
+
+### Added
+
+- `src/router.js`: hash routing extracted from `App.jsx` into its own module (`routeFromHash` / `buildHashRoute`), extended so `#/number-link/:level` carries an optional level number alongside the existing bare `#/number-link` and `#/daily(/:date)` forms. Covered by `test/router.test.mjs`.
+
+### Fixed
+
+- **Home level grid didn't open the level it showed.** `src/components/Home.jsx`'s level nodes now pass their level number through `onSelect`, and `src/games/NumberLink.jsx` accepts an `initialLevel` prop that jumps straight into that level's puzzle on mount instead of showing the level-select menu. Locked nodes are now non-interactive (`disabled`, dimmed) rather than silently opening the menu.
+- **Puzzle kept regenerating after entering a level.** Two compounding bugs, both in `NumberLink.jsx`: (1) `startLevel` depended on the whole `session` object returned by `useGameSession`, which is a fresh object literal every render, so `startLevel`'s identity — and anything depending on it — churned every render (e.g. every timer tick); narrowed the dependency to the stable `session.start`. (2) the new auto-start-from-URL effect depended on `unlockedLevel`, so *winning* a level (which bumps `unlockedLevel`) re-ran the effect and silently restarted the level just solved; guarded with a ref so the URL-driven auto-start fires at most once per navigation.
+
+### Verification
+
+- `npm test` — 27/27 passing (2 new router tests added).
+- `npm run build` — succeeds.
+- Manually driven end-to-end in headless Chromium (Playwright): home → level 1 opens directly into the puzzle (not the menu) → puzzle stays stable while idle for 3.5s → clearing level 1 shows the win screen with correct stats → "下一關" advances into level 2 → back on Home, level 2 shows unlocked and opens directly.
+
+---
+
 ## v1.2 — Home screen redesign (F7) + boot loading screen (F6-b)
 
 Brings the CEO-approved home screen mockup (`主畫面與加載頁_視覺稿v1.html`) and the boot loading screen into P0, plus the `home_view` funnel event.

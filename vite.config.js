@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["icon-192.png", "icon-512.png"],
       manifest: {
-        name: "紙墨集 Paper & Ink",
-        short_name: "紙墨集",
-        description: "文青紙墨風小遊戲合輯，含每日一筆連挑戰",
+        name: "紙墨筆 Paper & Ink",
+        short_name: "紙墨筆",
+        description: "文青紙墨風的一筆連數字路徑謎題，含每日挑戰",
         start_url: "/game/",
         scope: "/game/",
         display: "standalone",

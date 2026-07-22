@@ -14,7 +14,7 @@ import {
 
 const TEXT = {
   zh: {
-    title: "安裝紙墨集到主畫面",
+    title: "安裝紙墨筆到主畫面",
     body: "像 App 一樣開啟，離線也能玩。",
     iosBody: "點選分享圖示，選擇「加入主畫面」。",
     install: "安裝",

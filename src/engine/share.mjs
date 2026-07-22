@@ -13,7 +13,7 @@ export function buildShareText({ date, dailyNo, size, timeSec, perfect, streak, 
   const t = fmtTime(timeSec);
   if (lang === "zh") {
     return [
-      `紙墨集・一筆連 每日挑戰 #${dailyNo}`,
+      `紙墨筆・一筆連 每日挑戰 #${dailyNo}`,
       `${size}×${size}｜${t}${perfect ? "｜🖋 一筆連成・完美" : ""}`,
       streak >= 2 ? `🔥 連續 ${streak} 天` : null,
       inkThumb(size),

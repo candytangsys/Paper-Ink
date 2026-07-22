@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
-import { Undo2, Lightbulb, RotateCcw, ArrowLeft, Lock, Check, Timer, Feather, Home } from "lucide-react";
-import { COLORS, inkWashStyle, homeBtnStyle, brandRowStyle, eyebrowStyle } from "../theme.jsx";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Undo2, Lightbulb, RotateCcw, ArrowLeft, Timer, Feather } from "lucide-react";
+import { inkWashStyle } from "../theme.jsx";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "../components/LangToggle.jsx";
 import Board from "./numberlink/Board.jsx";
@@ -12,15 +12,9 @@ import { recordLevelCompletion } from "../pwaInstall.js";
 
 const TEXT = {
   zh: {
-    home: "主畫面",
-    brandTag: "Number · Ink · Path",
-    title: "一筆連",
-    subtitle: (n) => `循著數字順序，一筆連過每一格　·　共 ${n} 關`,
     level: (n) => `第 ${n} 關`,
-    tier: { 1: "易", 2: "中", 3: "難" },
     perfect: "完美",
-    hint: "深色的圓是已知的落點，淺色的圓待你循序推敲。可輕點逐一相連，或按住指尖，一筆滑過。",
-    backToLevels: "返回關卡選單",
+    backToLevels: "返回主畫面",
     regenerate: "重新出題",
     nextStroke: (n) => `下一筆　${n}`,
     solved: "一筆連成",
@@ -32,20 +26,14 @@ const TEXT = {
     bestRecord: (time, mistakes) => `最佳紀錄 ${time} · ${mistakes}`,
     playAgain: "再玩一次",
     nextLevel: "下一關",
-    backToMenu: "返回選單",
+    backToMenu: "返回主畫面",
     loading: "研墨中…",
     abHints: { 2: "斜角也能走", 5: "按住可一筆滑過", 7: "卡住了？試試回退或提示" },
   },
   en: {
-    home: "Home",
-    brandTag: "Number · Ink · Path",
-    title: "One-Stroke Path",
-    subtitle: (n) => `Trace every cell in order, in a single stroke　·　${n} levels`,
     level: (n) => `Level ${n}`,
-    tier: { 1: "Easy", 2: "Medium", 3: "Hard" },
     perfect: "Perfect",
-    hint: "The dark circles are known points, the light ones await your reasoning. Tap them one by one, or press and drag to trace the whole path in one stroke.",
-    backToLevels: "Back to level menu",
+    backToLevels: "Back to Home",
     regenerate: "New puzzle",
     nextStroke: (n) => `Next stroke　${n}`,
     solved: "Solved in one stroke",
@@ -57,7 +45,7 @@ const TEXT = {
     bestRecord: (time, mistakes) => `Best ${time} · ${mistakes}`,
     playAgain: "Play again",
     nextLevel: "Next level",
-    backToMenu: "Back to menu",
+    backToMenu: "Back to Home",
     loading: "Grinding ink…",
     abHints: { 2: "Diagonal moves work too", 5: "Press and hold to trace in one stroke", 7: "Stuck? Try undo or hint" },
   },
@@ -118,14 +106,6 @@ export const LEVEL_COUNT = LEVELS.length;
 export const NUMBERLINK_STORAGE_KEY = STORAGE_KEY;
 const CONTROLS_UNLOCK_LEVEL = 7;
 const DIAGONAL_FORCED_LEVELS = new Set([2, 3]);
-
-// Difficulty tier (1 easy → 3 hard) from how sparse the clues are.
-function difficultyTier(size, clues) {
-  const ratio = clues / (size * size);
-  if (ratio >= 0.5) return 1;
-  if (ratio >= 0.28) return 2;
-  return 3;
-}
 
 /* ---------- puzzle generation ---------- */
 
@@ -245,10 +225,9 @@ function buildPuzzle(n, clues, { requireDiagonal = false } = {}) {
 
 /* ---------- main component ---------- */
 
-export default function NumberLink({ onExit }) {
+export default function NumberLink({ onExit, initialLevel = null }) {
   const { lang } = useLanguage();
   const t = TEXT[lang];
-  const [screen, setScreen] = useState("menu"); // 'menu' | 'game'
   const [unlockedLevel, setUnlockedLevel] = useState(1);
   const [best, setBest] = useState({});
   const [loaded, setLoaded] = useState(false);
@@ -312,11 +291,26 @@ export default function NumberLink({ onExit }) {
       const p = buildPuzzle(spec.size, spec.clues, { requireDiagonal: DIAGONAL_FORCED_LEVELS.has(lvl) });
       setLevelIndex(lvl);
       session.start(p);
-      setScreen("game");
       track("tutorial_level_start", { level: lvl });
     },
-    [session]
+    [session.start]
   );
+
+  // NumberLink no longer has its own level-select screen — Home's level grid
+  // is the sole entry point and always deep-links a specific level. Start it
+  // once per navigation; if it's missing, out of range, or still locked,
+  // there's nothing to show here, so bounce back to Home instead.
+  const autoStartedLevelRef = useRef();
+  useEffect(() => {
+    if (!loaded) return;
+    if (autoStartedLevelRef.current === initialLevel) return;
+    autoStartedLevelRef.current = initialLevel;
+    if (initialLevel != null && initialLevel >= 1 && initialLevel <= LEVELS.length && initialLevel <= unlockedLevel) {
+      startLevel(initialLevel);
+    } else {
+      onExit && onExit();
+    }
+  }, [initialLevel, loaded, unlockedLevel, startLevel, onExit]);
 
   const regenerate = useCallback(() => {
     startLevel(levelIndex);
@@ -334,99 +328,23 @@ export default function NumberLink({ onExit }) {
     <div style={styles.root}>
       <div style={inkWashStyle} />
       <LangToggle />
-      {screen === "menu" ? (
-        <MenuScreen unlockedLevel={unlockedLevel} best={best} onStart={startLevel} onExit={onExit} t={t} />
-      ) : (
-        <GameScreen
-          levelIndex={levelIndex}
-          session={session}
-          best={best[levelIndex]}
-          variant={variant}
-          onRegenerate={regenerate}
-          onBack={() => setScreen("menu")}
-          onNextLevel={() => startLevel(Math.min(LEVELS.length, levelIndex + 1))}
-          onReplay={() => startLevel(levelIndex)}
-          hasNextLevel={levelIndex < LEVELS.length}
-          t={t}
-        />
-      )}
+      <GameScreen
+        levelIndex={levelIndex}
+        session={session}
+        best={best[levelIndex]}
+        variant={variant}
+        onRegenerate={regenerate}
+        onBack={onExit}
+        onNextLevel={() => startLevel(Math.min(LEVELS.length, levelIndex + 1))}
+        onReplay={() => startLevel(levelIndex)}
+        hasNextLevel={levelIndex < LEVELS.length}
+        t={t}
+      />
     </div>
   );
 }
 
 /* ---------- screens ---------- */
-
-function MenuScreen({ unlockedLevel, best, onStart, onExit, t }) {
-  return (
-    <div style={styles.menuWrap}>
-      {onExit && (
-        <button onClick={onExit} style={homeBtnStyle} aria-label={t.home}>
-          <Home size={15} color={COLORS.inkSoft} />
-          <span>{t.home}</span>
-        </button>
-      )}
-      <div style={brandRowStyle}>
-        <Feather size={18} color={COLORS.vermillion} />
-        <span style={eyebrowStyle}>{t.brandTag}</span>
-      </div>
-      <h1 style={styles.title}>{t.title}</h1>
-      <p style={styles.subtitle}>{t.subtitle(LEVELS.length)}</p>
-
-      <div style={styles.levelGrid}>
-        {LEVELS.map((spec, i) => {
-          const lvl = i + 1;
-          const { size, clues } = spec;
-          const locked = lvl > unlockedLevel;
-          const record = best[lvl];
-          const tier = difficultyTier(size, clues);
-          return (
-            <button
-              key={lvl}
-              onClick={() => !locked && onStart(lvl)}
-              disabled={locked}
-              style={{
-                ...styles.levelCard,
-                ...(locked ? styles.levelCardLocked : {}),
-              }}
-            >
-              <div style={styles.levelCardTop}>
-                <span style={styles.levelNum}>{String(lvl).padStart(2, "0")}</span>
-                {locked ? (
-                  <Lock size={15} color="#A99E88" />
-                ) : record ? (
-                  <Check size={15} color="#4C5B6E" />
-                ) : null}
-              </div>
-              <div style={styles.levelSize}>{t.level(lvl)}</div>
-              <div style={styles.levelMetaRow}>
-                <span style={styles.tierDots}>
-                  {[1, 2, 3].map((d) => (
-                    <span
-                      key={d}
-                      style={{
-                        ...styles.tierDot,
-                        background: d <= tier ? "#8A6A3A" : "transparent",
-                        border: `1px solid ${d <= tier ? "#8A6A3A" : "rgba(51,48,42,0.28)"}`,
-                      }}
-                    />
-                  ))}
-                </span>
-                <span style={styles.tierLabel}>{t.tier[tier]}</span>
-              </div>
-              {record && (
-                <div style={styles.levelRecord}>
-                  {fmtTime(record.time)} · {record.mistakes === 0 ? t.perfect : t.mistakes(record.mistakes)}
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      <p style={styles.hint}>{t.hint}</p>
-    </div>
-  );
-}
 
 function GameScreen({ levelIndex, session, best, variant, onRegenerate, onBack, onNextLevel, onReplay, hasNextLevel, t }) {
   const { puzzle, filledOrder, filledSet, candidateSet, taps, mistakes, elapsed, won, shakeKey, advanceTo, undo, hint } = session;
@@ -439,19 +357,19 @@ function GameScreen({ levelIndex, session, best, variant, onRegenerate, onBack, 
     <div style={styles.gameWrap}>
       <div style={styles.gameHeader}>
         <button onClick={onBack} style={styles.iconBtn} aria-label={t.backToLevels}>
-          <ArrowLeft size={18} color="#6B6456" />
+          <ArrowLeft size={18} color="#5A564C" />
         </button>
         <div style={styles.gameHeaderCenter}>
           <div style={styles.gameLevelLabel}>{t.level(levelIndex)}</div>
           <div style={styles.gameNext}>{won ? t.solved : t.nextStroke(nextNum)}</div>
         </div>
         <button onClick={onRegenerate} style={styles.iconBtn} aria-label={t.regenerate}>
-          <RotateCcw size={16} color="#6B6456" />
+          <RotateCcw size={16} color="#5A564C" />
         </button>
       </div>
 
       <div style={styles.statsRow}>
-        <StatPill icon={<Timer size={13} color="#8C8271" />} label={fmtTime(elapsed)} />
+        <StatPill icon={<Timer size={13} color="#8B8478" />} label={fmtTime(elapsed)} />
         <StatPill label={t.steps(taps)} />
         <StatPill label={t.mistakes(mistakes)} warn={mistakes > 0} />
       </div>
@@ -484,7 +402,7 @@ function GameScreen({ levelIndex, session, best, variant, onRegenerate, onBack, 
       {won && (
         <div style={styles.winOverlay}>
           <div style={styles.winCard}>
-            <Feather size={24} color="#A23C2E" />
+            <Feather size={24} color="#B23A2E" />
             <div style={styles.winTitle}>{t.solved}</div>
             <div style={styles.winStats}>
               {fmtTime(elapsed)} · {t.steps(taps)} · {t.mistakesLabel(mistakes)}
@@ -515,7 +433,7 @@ function GameScreen({ levelIndex, session, best, variant, onRegenerate, onBack, 
 
 function StatPill({ icon, label, warn }) {
   return (
-    <div style={{ ...styles.statPill, ...(warn ? { color: "#A23C2E", border: "1px solid rgba(162,60,46,0.4)" } : {}) }}>
+    <div style={{ ...styles.statPill, ...(warn ? { color: "#B23A2E", border: "1px solid rgba(178,58,46,0.4)" } : {}) }}>
       {icon}
       <span>{label}</span>
     </div>
@@ -529,8 +447,8 @@ const styles = {
     position: "relative",
     minHeight: "100vh",
     width: "100%",
-    background: "#E4DCC9",
-    color: "#33302A",
+    background: "#F3EEE1",
+    color: "#2B2A28",
     fontFamily: "'Noto Serif TC', 'EB Garamond', serif",
     overflowX: "hidden",
     overflowY: "auto",
@@ -539,118 +457,14 @@ const styles = {
   },
   rootLoading: {
     minHeight: "100vh",
-    background: "#E4DCC9",
-    color: "#6B6456",
+    background: "#F3EEE1",
+    color: "#5A564C",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     fontFamily: "'Noto Serif TC', serif",
   },
   loadingText: { fontSize: 15, letterSpacing: 4 },
-  menuWrap: {
-    position: "relative",
-    zIndex: 1,
-    width: "100%",
-    maxWidth: 480,
-    padding: "56px 22px 40px",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    textAlign: "center",
-    animation: "ink-rise 0.7s ease both",
-  },
-  title: {
-    fontFamily: "'Noto Serif TC', serif",
-    fontSize: 46,
-    fontWeight: 600,
-    margin: "0 0 10px",
-    letterSpacing: 8,
-    color: "#33302A",
-    textIndent: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#6B6456",
-    margin: "0 0 38px",
-    letterSpacing: 1,
-    lineHeight: 1.6,
-  },
-  levelGrid: {
-    width: "100%",
-    display: "grid",
-    gridTemplateColumns: "repeat(2, 1fr)",
-    gap: 14,
-  },
-  levelCard: {
-    background: "#F1EADA",
-    border: "1px solid rgba(51,48,42,0.14)",
-    borderRadius: 4,
-    padding: "18px 18px",
-    textAlign: "left",
-    cursor: "pointer",
-    color: "#33302A",
-    boxShadow: "0 1px 0 rgba(51,48,42,0.05)",
-  },
-  levelCardLocked: {
-    opacity: 0.42,
-    cursor: "not-allowed",
-  },
-  levelCardTop: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  levelNum: {
-    fontFamily: "'EB Garamond', serif",
-    fontSize: 14,
-    letterSpacing: 2,
-    color: "#A99E88",
-  },
-  levelSize: {
-    fontFamily: "'Cormorant Garamond', 'Noto Serif TC', serif",
-    fontSize: 26,
-    fontWeight: 600,
-    letterSpacing: 1,
-    color: "#33302A",
-  },
-  levelRecord: {
-    marginTop: 8,
-    fontSize: 12.5,
-    color: "#4C5B6E",
-    fontFamily: "'Noto Serif TC', serif",
-  },
-  levelMetaRow: {
-    marginTop: 8,
-    display: "flex",
-    alignItems: "center",
-    gap: 7,
-  },
-  tierDots: {
-    display: "inline-flex",
-    gap: 4,
-  },
-  tierDot: {
-    width: 6,
-    height: 6,
-    borderRadius: "50%",
-    border: "1px solid rgba(51,48,42,0.28)",
-    display: "inline-block",
-  },
-  tierLabel: {
-    fontSize: 12,
-    color: "#8C8271",
-    fontFamily: "'Noto Serif TC', serif",
-    letterSpacing: 1,
-  },
-  hint: {
-    marginTop: 34,
-    fontSize: 13,
-    color: "#8C8271",
-    lineHeight: 1.9,
-    maxWidth: 320,
-    letterSpacing: 0.5,
-  },
   gameWrap: {
     position: "relative",
     zIndex: 1,
@@ -670,8 +484,8 @@ const styles = {
     marginBottom: 16,
   },
   iconBtn: {
-    background: "#F1EADA",
-    border: "1px solid rgba(51,48,42,0.16)",
+    background: "#EAE2CF",
+    border: "1px solid rgba(43,42,40,0.16)",
     borderRadius: 4,
     width: 38,
     height: 38,
@@ -684,7 +498,7 @@ const styles = {
   gameLevelLabel: {
     fontFamily: "'EB Garamond', serif",
     fontSize: 12,
-    color: "#A99E88",
+    color: "#8B8478",
     letterSpacing: 2,
   },
   gameNext: {
@@ -693,7 +507,7 @@ const styles = {
     fontWeight: 600,
     marginTop: 3,
     letterSpacing: 3,
-    color: "#A23C2E",
+    color: "#B23A2E",
   },
   statsRow: {
     display: "flex",
@@ -705,19 +519,19 @@ const styles = {
     alignItems: "center",
     gap: 6,
     background: "transparent",
-    border: "1px solid rgba(51,48,42,0.16)",
+    border: "1px solid rgba(43,42,40,0.16)",
     borderRadius: 999,
     padding: "5px 14px",
     fontSize: 13,
     fontFamily: "'EB Garamond', serif",
     letterSpacing: 1,
-    color: "#6B6456",
+    color: "#5A564C",
   },
   abHint: {
     marginTop: -10,
     marginBottom: 16,
     fontSize: 12.5,
-    color: "#8A6A3A",
+    color: "#B8925A",
     fontFamily: "'Noto Serif TC', serif",
     letterSpacing: 1,
     textAlign: "center",
@@ -730,11 +544,11 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: 7,
-    background: "#F1EADA",
-    border: "1px solid rgba(51,48,42,0.16)",
+    background: "#EAE2CF",
+    border: "1px solid rgba(43,42,40,0.16)",
     borderRadius: 4,
     padding: "11px 22px",
-    color: "#33302A",
+    color: "#2B2A28",
     fontSize: 14,
     fontFamily: "'Noto Serif TC', serif",
     letterSpacing: 2,
@@ -743,7 +557,7 @@ const styles = {
   winOverlay: {
     position: "fixed",
     inset: 0,
-    background: "rgba(46,42,34,0.42)",
+    background: "rgba(43,42,40,0.42)",
     backdropFilter: "blur(2px)",
     display: "flex",
     alignItems: "center",
@@ -752,14 +566,14 @@ const styles = {
     padding: 20,
   },
   winCard: {
-    background: "#F1EADA",
-    border: "1px solid rgba(51,48,42,0.18)",
+    background: "#EAE2CF",
+    border: "1px solid rgba(43,42,40,0.18)",
     borderRadius: 6,
     padding: "34px 30px",
     textAlign: "center",
     maxWidth: 320,
     width: "100%",
-    boxShadow: "0 24px 60px rgba(46,42,34,0.28)",
+    boxShadow: "0 24px 60px rgba(43,42,40,0.28)",
   },
   winTitle: {
     fontFamily: "'Noto Serif TC', serif",
@@ -767,19 +581,19 @@ const styles = {
     fontWeight: 600,
     letterSpacing: 6,
     margin: "12px 0 8px",
-    color: "#A23C2E",
+    color: "#B23A2E",
     textIndent: 6,
   },
   winStats: {
     fontSize: 14,
-    color: "#6B6456",
+    color: "#5A564C",
     fontFamily: "'EB Garamond', serif",
     letterSpacing: 1,
   },
   winBest: {
     marginTop: 10,
     fontSize: 12.5,
-    color: "#A99E88",
+    color: "#8B8478",
     fontFamily: "'EB Garamond', serif",
     letterSpacing: 1,
   },
@@ -792,9 +606,9 @@ const styles = {
     flex: 1,
     padding: "11px 0",
     borderRadius: 4,
-    border: "1px solid rgba(51,48,42,0.22)",
+    border: "1px solid rgba(43,42,40,0.22)",
     background: "transparent",
-    color: "#33302A",
+    color: "#2B2A28",
     fontSize: 14,
     fontFamily: "'Noto Serif TC', serif",
     letterSpacing: 2,
@@ -804,9 +618,9 @@ const styles = {
     flex: 1,
     padding: "11px 0",
     borderRadius: 4,
-    border: "1px solid #A23C2E",
-    background: "#A23C2E",
-    color: "#F1EADA",
+    border: "1px solid #B23A2E",
+    background: "#B23A2E",
+    color: "#EAE2CF",
     fontWeight: 600,
     fontSize: 14,
     fontFamily: "'Noto Serif TC', serif",

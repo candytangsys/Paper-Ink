@@ -204,7 +204,7 @@ export default function Board({
           const isShaking = shakeKey === key;
 
           let bg = "#EBE3D0";
-          let border = "1px solid rgba(51,48,42,0.16)";
+          let border = "1px solid rgba(43,42,40,0.16)";
           let color = "#B7AC96";
           let boxShadow = "none";
           let fontWeight = 500;
@@ -212,16 +212,16 @@ export default function Board({
           if (isFilled) {
             const t = puzzle.total > 1 ? (num - 1) / (puzzle.total - 1) : 0;
             bg = inkTrailColor(t);
-            border = "1px solid rgba(241,234,218,0.55)";
-            color = "#F4EEDF";
+            border = "1px solid rgba(243,238,225,0.55)";
+            color = "#F3EEE1";
             fontWeight = 600;
             boxShadow = isHead
-              ? `0 0 0 3px rgba(162,60,46,0.85), 0 2px 8px rgba(51,48,42,0.25)`
-              : `0 1px 4px rgba(51,48,42,0.18)`;
+              ? `0 0 0 3px rgba(178,58,46,0.85), 0 2px 8px rgba(43,42,40,0.25)`
+              : `0 1px 4px rgba(43,42,40,0.18)`;
           } else if (isClueOnly) {
             bg = "#E7DBBF";
-            border = "1.5px solid rgba(51,48,42,0.5)";
-            color = "#33302A";
+            border = "1.5px solid rgba(43,42,40,0.5)";
+            color = "#2B2A28";
             fontWeight = 600;
           } else if (isCandidate) {
             bg = "rgba(110,142,134,0.12)";
@@ -269,9 +269,9 @@ const styles = {
     gap: 5,
     padding: 16,
     borderRadius: 6,
-    background: "#F1EADA",
-    border: "1px solid rgba(51,48,42,0.14)",
-    boxShadow: "0 2px 24px rgba(51,48,42,0.10), inset 0 0 0 1px rgba(241,234,218,0.6)",
+    background: "#EAE2CF",
+    border: "1px solid rgba(43,42,40,0.14)",
+    boxShadow: "0 2px 24px rgba(43,42,40,0.10), inset 0 0 0 1px rgba(243,238,225,0.6)",
     marginBottom: 24,
   },
   lineLayer: {

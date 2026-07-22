@@ -21,7 +21,7 @@ const WEEKDAY_NAMES = {
 
 const TEXT = {
   zh: {
-    brand: "紙墨集",
+    brand: "紙墨筆",
     dailyEyebrow: (weekday) => `${weekday} · 今日挑戰`,
     dailyNo: (n) => `#${String(n).padStart(2, "0")}`,
     clues: "線索",
@@ -162,13 +162,16 @@ export default function Home({ onSelect }) {
             const done = !!progress.best[lvl] || lvl < progress.unlockedLevel;
             const current = !done && lvl === progress.unlockedLevel;
             const state = done ? "done" : current ? "current" : "locked";
+            const locked = state === "locked";
             return (
               <button
                 key={lvl}
-                onClick={() => onSelect("number-link")}
+                onClick={() => !locked && onSelect("number-link", lvl)}
+                disabled={locked}
                 style={{
                   ...styles.levelNode,
                   ...(state === "done" ? styles.levelNodeDone : state === "current" ? styles.levelNodeCurrent : {}),
+                  ...(locked ? styles.levelNodeLocked : {}),
                 }}
               >
                 {lvl}
@@ -350,4 +353,5 @@ const styles = {
   },
   levelNodeDone: { background: HOME_COLORS.bamboo, color: HOME_COLORS.paper, borderColor: HOME_COLORS.bamboo },
   levelNodeCurrent: { background: HOME_COLORS.seal, color: HOME_COLORS.paper, borderColor: HOME_COLORS.seal },
+  levelNodeLocked: { cursor: "not-allowed", opacity: 0.45 },
 };

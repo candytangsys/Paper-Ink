@@ -274,7 +274,7 @@ function GameArea({ session, t }) {
     <>
       <div style={styles.statusLine}>{won ? t.solved : t.nextStroke(nextNum)}</div>
       <div style={styles.statsRow}>
-        <StatPill icon={<Timer size={13} color="#8C8271" />} label={fmtTime(elapsed)} />
+        <StatPill icon={<Timer size={13} color="#8B8478" />} label={fmtTime(elapsed)} />
         <StatPill label={t.steps(taps)} />
         <StatPill label={t.mistakes(mistakes)} warn={mistakes > 0} />
       </div>
@@ -306,7 +306,7 @@ function GameArea({ session, t }) {
 function RecapCard({ entry, isToday, streakStatus, onShare, t }) {
   return (
     <div style={styles.recapCard}>
-      <Feather size={26} color="#A23C2E" />
+      <Feather size={26} color="#B23A2E" />
       <div style={styles.recapTitle}>{isToday ? t.alreadyDoneTitle : t.alreadyDoneTitlePast}</div>
       <div style={styles.recapStats}>
         {fmtTime(entry.timeSec)} · {entry.perfect ? t.perfectBadge : t.mistakesLabel(entry.mistakes)}
@@ -327,7 +327,7 @@ function RecapCard({ entry, isToday, streakStatus, onShare, t }) {
 
 function StatPill({ icon, label, warn }) {
   return (
-    <div style={{ ...styles.statPill, ...(warn ? { color: "#A23C2E", border: "1px solid rgba(162,60,46,0.4)" } : {}) }}>
+    <div style={{ ...styles.statPill, ...(warn ? { color: "#B23A2E", border: "1px solid rgba(178,58,46,0.4)" } : {}) }}>
       {icon}
       <span>{label}</span>
     </div>
@@ -339,8 +339,8 @@ const styles = {
     position: "relative",
     minHeight: "100vh",
     width: "100%",
-    background: "#E4DCC9",
-    color: "#33302A",
+    background: "#F3EEE1",
+    color: "#2B2A28",
     fontFamily: "'Noto Serif TC', 'EB Garamond', serif",
     overflowX: "hidden",
     overflowY: "auto",
@@ -349,8 +349,8 @@ const styles = {
   },
   rootLoading: {
     minHeight: "100vh",
-    background: "#E4DCC9",
-    color: "#6B6456",
+    background: "#F3EEE1",
+    color: "#5A564C",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -375,11 +375,11 @@ const styles = {
     fontWeight: 600,
     margin: "0 0 6px",
     letterSpacing: 4,
-    color: "#33302A",
+    color: "#2B2A28",
   },
   reviewBanner: {
     fontSize: 12.5,
-    color: "#8C8271",
+    color: "#8B8478",
     letterSpacing: 1,
     margin: "0 0 18px",
   },
@@ -388,18 +388,18 @@ const styles = {
     flexDirection: "column",
     gap: 10,
     alignItems: "center",
-    background: "rgba(162,60,46,0.08)",
-    border: "1px solid rgba(162,60,46,0.3)",
+    background: "rgba(178,58,46,0.08)",
+    border: "1px solid rgba(178,58,46,0.3)",
     borderRadius: 6,
     padding: "14px 16px",
     marginBottom: 20,
     fontSize: 12.5,
-    color: "#6B6456",
+    color: "#5A564C",
     maxWidth: 340,
   },
   rescueBtn: {
-    background: "#A23C2E",
-    color: "#F1EADA",
+    background: "#B23A2E",
+    color: "#EAE2CF",
     border: "none",
     borderRadius: 4,
     padding: "8px 18px",
@@ -413,7 +413,7 @@ const styles = {
     fontSize: 16,
     fontWeight: 600,
     letterSpacing: 3,
-    color: "#A23C2E",
+    color: "#B23A2E",
     marginBottom: 16,
   },
   statsRow: {
@@ -426,13 +426,13 @@ const styles = {
     alignItems: "center",
     gap: 6,
     background: "transparent",
-    border: "1px solid rgba(51,48,42,0.16)",
+    border: "1px solid rgba(43,42,40,0.16)",
     borderRadius: 999,
     padding: "5px 14px",
     fontSize: 13,
     fontFamily: "'EB Garamond', serif",
     letterSpacing: 1,
-    color: "#6B6456",
+    color: "#5A564C",
   },
   controlsRow: {
     display: "flex",
@@ -442,25 +442,25 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: 7,
-    background: "#F1EADA",
-    border: "1px solid rgba(51,48,42,0.16)",
+    background: "#EAE2CF",
+    border: "1px solid rgba(43,42,40,0.16)",
     borderRadius: 4,
     padding: "11px 22px",
-    color: "#33302A",
+    color: "#2B2A28",
     fontSize: 14,
     fontFamily: "'Noto Serif TC', serif",
     letterSpacing: 2,
     cursor: "pointer",
   },
   recapCard: {
-    background: "#F1EADA",
-    border: "1px solid rgba(51,48,42,0.18)",
+    background: "#EAE2CF",
+    border: "1px solid rgba(43,42,40,0.18)",
     borderRadius: 6,
     padding: "34px 30px",
     textAlign: "center",
     maxWidth: 320,
     width: "100%",
-    boxShadow: "0 8px 30px rgba(46,42,34,0.14)",
+    boxShadow: "0 8px 30px rgba(43,42,40,0.14)",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -471,11 +471,11 @@ const styles = {
     fontSize: 22,
     fontWeight: 600,
     letterSpacing: 4,
-    color: "#A23C2E",
+    color: "#B23A2E",
   },
   recapStats: {
     fontSize: 14,
-    color: "#6B6456",
+    color: "#5A564C",
     fontFamily: "'EB Garamond', serif",
     letterSpacing: 1,
   },
@@ -492,8 +492,8 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: 8,
-    background: "#A23C2E",
-    color: "#F1EADA",
+    background: "#B23A2E",
+    color: "#EAE2CF",
     border: "none",
     borderRadius: 4,
     padding: "12px 26px",
@@ -516,8 +516,8 @@ const styles = {
     bottom: 28,
     left: "50%",
     transform: "translateX(-50%)",
-    background: "#33302A",
-    color: "#F1EADA",
+    background: "#2B2A28",
+    color: "#EAE2CF",
     padding: "10px 20px",
     borderRadius: 999,
     fontSize: 13,

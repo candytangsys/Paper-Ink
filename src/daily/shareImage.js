@@ -6,7 +6,7 @@ const HEIGHT = 1350;
 
 const SHARE_TEXT = {
   zh: {
-    brand: "紙墨集・一筆連",
+    brand: "紙墨筆・一筆連",
     daily: (n) => `每日挑戰 #${n}`,
     perfect: "完",
     streak: (n) => `連續 ${n} 天`,
@@ -51,14 +51,39 @@ function drawPathThumb(ctx, solution, size, box) {
   ctx.restore();
 }
 
+// Traditional seals are never stamped perfectly square — a fixed rotation
+// reads as a template. Each share gets its own tilt within a natural
+// hand-stamped range instead.
+const STAMP_TILT_MIN_DEG = 3;
+const STAMP_TILT_MAX_DEG = 5;
+
 function drawPerfectStamp(ctx, label) {
+  const w = 170;
+  const h = 170;
+  const r = 12;
+  const x = -w / 2;
+  const y = -h / 2;
+
   ctx.save();
   ctx.translate(WIDTH - 190, HEIGHT - 260);
-  ctx.rotate(-0.12);
+  const tiltDeg = STAMP_TILT_MIN_DEG + Math.random() * (STAMP_TILT_MAX_DEG - STAMP_TILT_MIN_DEG);
+  const sign = Math.random() < 0.5 ? -1 : 1;
+  ctx.rotate((sign * tiltDeg * Math.PI) / 180);
   ctx.globalAlpha = 0.88;
   ctx.strokeStyle = COLORS.vermillion;
-  ctx.lineWidth = 6;
-  ctx.strokeRect(-85, -85, 170, 170);
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+  ctx.stroke();
   ctx.fillStyle = COLORS.vermillion;
   ctx.font = "700 46px 'Noto Serif TC', serif";
   ctx.textAlign = "center";

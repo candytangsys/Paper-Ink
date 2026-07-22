@@ -1,16 +1,21 @@
 // Shared "文青紙墨風" (literary ink-and-paper) design tokens, used by every
 // game in the hub so the whole app reads as one consistent piece.
-
+//
+// Aligned to homeTheme.js's HOME_COLORS (the approved F7 visual) as of v1.3,
+// so gameplay screens no longer read as a separate, older palette from Home.
+// celadon/indigoGrey/ochre keep their own values — they drive the ink-trail
+// gradient and candidate-highlight accent, which have no equivalent token in
+// HOME_COLORS and were out of scope for the F7 mockup.
 export const COLORS = {
-  paper: "#E4DCC9", // rice-paper page background
-  panel: "#F1EADA", // card / panel surface
-  ink: "#33302A", // primary ink-brown text
-  inkSoft: "#6B6456", // secondary text
-  faint: "#8C8271", // tertiary / label text
-  hairline: "#A99E88", // fine rule / numerals
-  border: "rgba(51,48,42,0.16)",
-  borderStrong: "rgba(51,48,42,0.28)",
-  vermillion: "#A23C2E", // 朱砂紅 — current position / primary accent
+  paper: "#F3EEE1", // rice-paper page background
+  panel: "#EAE2CF", // card / panel surface
+  ink: "#2B2A28", // primary ink-brown text
+  inkSoft: "#5A564C", // secondary text
+  faint: "#8B8478", // tertiary / label text
+  hairline: "#8B8478", // fine rule / numerals
+  border: "rgba(43,42,40,0.16)",
+  borderStrong: "rgba(43,42,40,0.28)",
+  vermillion: "#B23A2E", // 朱砂紅 — current position / primary accent
   celadon: "#6E8E86", // 青瓷 — gradient start / "next step" dashed ring
   indigoGrey: "#4C5B6E", // 黛青 — gradient mid
   ochre: "#B0793C", // 赭石 — gradient end

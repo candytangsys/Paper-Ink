@@ -1,7 +1,8 @@
 // F7 design tokens (approved 2026-07-21 visual, 主畫面與加載頁_視覺稿v1.html).
-// Scoped to Home.jsx and LoadingScreen.jsx only — every other screen keeps
-// following theme.jsx's existing palette per architecture constraint §5.5.
-// Do not adjust these hex values; the mockup file is the sole source of truth.
+// Originally scoped to Home.jsx and LoadingScreen.jsx only (architecture
+// constraint §5.5); as of v1.3 theme.jsx's COLORS was aligned to these same
+// hex values so gameplay screens match too. Do not adjust these hex values;
+// the mockup file is the sole source of truth.
 export const HOME_COLORS = {
   paper: "#F3EEE1",
   paperDeep: "#EAE2CF",

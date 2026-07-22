@@ -42,7 +42,7 @@ export default function LoadingScreen({ exiting }) {
         <circle cx={54} cy={102} r={3.5} fill={HOME_COLORS.inkFaint} opacity={0.35} />
         <circle cx={24} cy={80} r={4} fill={HOME_COLORS.seal} />
       </svg>
-      <div style={styles.title}>紙&nbsp;墨&nbsp;集</div>
+      <div style={styles.title}>紙&nbsp;墨&nbsp;筆</div>
       <div style={styles.subtitle}>Paper &amp; Ink · 一筆連</div>
       <style>{`
         @keyframes loading-draw {

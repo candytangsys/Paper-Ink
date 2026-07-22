@@ -1,10 +1,10 @@
 ### 🎮 立即遊玩 / Play now: **https://candytangsys.github.io/game/**
 
-**[中文](#紙墨集) · [English](#paper--ink)**
+**[中文](#紙墨筆) · [English](#paper--ink)**
 
 ---
 
-# 紙墨集
+# 紙墨筆
 
 一個文青紙墨風的「一筆連」數字路徑謎題，主畫面提供每日挑戰與 28 關練習兩種入口，介面支援中英雙語切換。
 
