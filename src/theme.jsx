@@ -38,7 +38,7 @@ export const FONT_DISPLAY = "'Cormorant Garamond', 'Noto Serif TC', serif";
 export function GlobalInkStyle() {
   return (
     <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,500;0,600;1,300;1,500&family=EB+Garamond:wght@400;500;600&family=Noto+Serif+TC:wght@300;400;500;600;700&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,500;0,600;1,300;1,500&family=EB+Garamond:wght@400;500;600&family=Noto+Serif+TC:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@400;500&family=JetBrains+Mono:wght@400;600&display=swap');
 
       *, *::before, *::after { box-sizing: border-box; }
       html, body, #root { min-height: 100%; }
