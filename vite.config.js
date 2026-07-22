@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
-  base: "/game/",
+  base: "/Paper-Ink/",
   plugins: [
     react(),
     VitePWA({
@@ -13,8 +13,8 @@ export default defineConfig({
         name: "紙墨筆 Paper & Ink",
         short_name: "紙墨筆",
         description: "文青紙墨風的一筆連數字路徑謎題，含每日挑戰",
-        start_url: "/game/",
-        scope: "/game/",
+        start_url: "/Paper-Ink/",
+        scope: "/Paper-Ink/",
         display: "standalone",
         background_color: "#F3EEE1",
         theme_color: "#F3EEE1",
@@ -29,7 +29,7 @@ export default defineConfig({
         // puzzles are generated locally from the date so no network
         // fetch is ever required once this shell is cached.
         globPatterns: ["**/*.{js,css,html,png,svg,webmanifest}"],
-        navigateFallback: "/game/index.html",
+        navigateFallback: "/Paper-Ink/index.html",
       },
     }),
   ],

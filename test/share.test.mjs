@@ -21,14 +21,14 @@ test("share text never reveals solution/clue data", () => {
 });
 
 test("share url carries attribution params", () => {
-  const url = buildShareUrl({ baseUrl: "https://candytangsys.github.io/game/", date: "2026-08-01", refId: "u_abc12345" });
+  const url = buildShareUrl({ baseUrl: "https://candytangsys.github.io/Paper-Ink/", date: "2026-08-01", refId: "u_abc12345" });
   const parsed = new URL(url);
   assert.equal(parsed.searchParams.get("ref"), "u_abc12345");
   assert.equal(parsed.searchParams.get("utm_source"), "share");
 });
 
 test("share url opens directly into the day's puzzle", () => {
-  const url = buildShareUrl({ baseUrl: "https://candytangsys.github.io/game/", date: "2026-08-01", refId: "u_abc12345" });
+  const url = buildShareUrl({ baseUrl: "https://candytangsys.github.io/Paper-Ink/", date: "2026-08-01", refId: "u_abc12345" });
   assert.match(url, /#\/daily\/2026-08-01/);
 });
 

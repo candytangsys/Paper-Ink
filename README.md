@@ -1,4 +1,4 @@
-### 🎮 立即遊玩 / Play now: **https://candytangsys.github.io/game/**
+### 🎮 立即遊玩 / Play now: **https://candytangsys.github.io/Paper-Ink/**
 
 **[中文](#紙墨筆) · [English](#paper--ink)**
 
