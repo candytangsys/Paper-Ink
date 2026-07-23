@@ -12,3 +12,8 @@ test("buildHashRoute creates level-specific hash routes", () => {
   assert.equal(buildHashRoute("number-link"), "/number-link");
   assert.equal(buildHashRoute(null), "/");
 });
+
+test("routeFromHash and buildHashRoute round-trip the history route", () => {
+  assert.deepEqual(routeFromHash("#/history"), { kind: "history" });
+  assert.equal(buildHashRoute("history"), "/history");
+});

@@ -1,5 +1,5 @@
 import { useMemo, useEffect } from "react";
-import { Check } from "lucide-react";
+import { Check, Lock, History } from "lucide-react";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "./LangToggle.jsx";
 import { HOME_COLORS, HOME_FONT_SERIF, HOME_FONT_SANS, HOME_FONT_MONO } from "../homeTheme.js";
@@ -8,7 +8,8 @@ import { fmtTime } from "../engine/share.mjs";
 import { createStreakStore } from "../engine/streak.mjs";
 import { getDailyEntry, loadDailyHistory } from "../dailyHistory.js";
 import { todayUTCString } from "../dateUtil.js";
-import { LEVEL_COUNT, NUMBERLINK_STORAGE_KEY } from "../games/NumberLink.jsx";
+import { CHAPTERS, CHAPTER_MILESTONE } from "../engine/chapters.mjs";
+import { loadChapterProgress, isChapterUnlocked } from "../chapterProgress.js";
 import { track } from "../analytics.js";
 
 // F7: the engine's WEEK_SCHEDULE[].label carries a fixed Chinese flavor
@@ -29,6 +30,9 @@ const TEXT = {
     ctaEnter: "進入今日挑戰",
     ctaDone: "查看今日成績",
     sectionLabel: "常規關卡",
+    chapterSize: (size) => `${size} × ${size}`,
+    chapterProgress: (count) => `${Math.min(count, CHAPTER_MILESTONE)}/${CHAPTER_MILESTONE}`,
+    historyLink: "個人歷史紀錄",
   },
   en: {
     brand: "Paper & Ink",
@@ -39,17 +43,11 @@ const TEXT = {
     ctaEnter: "Enter Today's Challenge",
     ctaDone: "View Today's Result",
     sectionLabel: "Regular Levels",
+    chapterSize: (size) => `${size} × ${size}`,
+    chapterProgress: (count) => `${Math.min(count, CHAPTER_MILESTONE)}/${CHAPTER_MILESTONE}`,
+    historyLink: "History",
   },
 };
-
-function loadNumberLinkProgress() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(NUMBERLINK_STORAGE_KEY));
-    return { unlockedLevel: raw?.unlockedLevel || 1, best: raw?.best || {} };
-  } catch {
-    return { unlockedLevel: 1, best: {} };
-  }
-}
 
 // Personal best across every daily completion so far, regardless of board
 // size — a simple, always-meaningful "your fastest daily clear" stat.
@@ -87,7 +85,14 @@ export default function Home({ onSelect }) {
   }, []);
   const weekdayName = WEEKDAY_NAMES[lang][daily.weekdayIdx];
 
-  const progress = useMemo(() => loadNumberLinkProgress(), []);
+  const chapters = useMemo(() => {
+    const progress = loadChapterProgress();
+    return CHAPTERS.map((size) => ({
+      size,
+      chapterClearCount: progress[size]?.chapterClearCount || 0,
+      unlocked: isChapterUnlocked(size),
+    }));
+  }, []);
 
   return (
     <div style={styles.root}>
@@ -148,33 +153,39 @@ export default function Home({ onSelect }) {
           <span style={styles.sectionLabelLine} />
         </div>
 
-        <div style={styles.levelGrid}>
-          {Array.from({ length: LEVEL_COUNT }, (_, i) => i + 1).map((lvl) => {
-            // Below the unlocked frontier always reads as done even without
-            // its own best[] entry (can only happen from injected/edge-case
-            // progress data, since normal play sets both together) — this
-            // keeps exactly one node "current" instead of a whole streak of
-            // them lighting up as seal.
-            const done = !!progress.best[lvl] || lvl < progress.unlockedLevel;
-            const current = !done && lvl === progress.unlockedLevel;
-            const state = done ? "done" : current ? "current" : "locked";
-            const locked = state === "locked";
+        <div style={styles.chapterGrid}>
+          {chapters.map(({ size, chapterClearCount, unlocked }) => {
+            const mastered = chapterClearCount >= CHAPTER_MILESTONE;
             return (
               <button
-                key={lvl}
-                onClick={() => !locked && onSelect("number-link", lvl)}
-                disabled={locked}
+                key={size}
+                onClick={() => unlocked && onSelect("number-link", size)}
+                disabled={!unlocked}
                 style={{
-                  ...styles.levelNode,
-                  ...(state === "done" ? styles.levelNodeDone : state === "current" ? styles.levelNodeCurrent : {}),
-                  ...(locked ? styles.levelNodeLocked : {}),
+                  ...styles.chapterNode,
+                  ...(mastered ? styles.chapterNodeMastered : unlocked ? styles.chapterNodeUnlocked : {}),
+                  ...(!unlocked ? styles.chapterNodeLocked : {}),
                 }}
               >
-                {lvl}
+                {unlocked ? (
+                  <>
+                    <span style={styles.chapterNodeSize}>{t.chapterSize(size)}</span>
+                    <span style={styles.chapterNodeProgress}>
+                      {mastered && <Check size={10} />} {t.chapterProgress(chapterClearCount)}
+                    </span>
+                  </>
+                ) : (
+                  <Lock size={16} />
+                )}
               </button>
             );
           })}
         </div>
+
+        <button onClick={() => onSelect("history")} style={styles.historyLink}>
+          <History size={14} />
+          <span>{t.historyLink}</span>
+        </button>
       </div>
     </div>
   );
@@ -328,25 +339,45 @@ const styles = {
     letterSpacing: "0.12em",
   },
   sectionLabelLine: { flex: 1, height: 1, background: HOME_COLORS.hairline },
-  levelGrid: {
+  chapterGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(6, 1fr)",
-    gap: 9,
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: 10,
   },
-  levelNode: {
-    aspectRatio: "1",
-    borderRadius: 9,
+  chapterNode: {
+    aspectRatio: "1.15",
+    borderRadius: 10,
     background: "#fff8ec",
     border: `1px solid ${HOME_COLORS.hairline}`,
     display: "flex",
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
+    gap: 4,
     fontFamily: HOME_FONT_MONO,
     fontSize: 12,
     color: HOME_COLORS.inkFaint,
     cursor: "pointer",
   },
-  levelNodeDone: { background: HOME_COLORS.bamboo, color: HOME_COLORS.paper, borderColor: HOME_COLORS.bamboo },
-  levelNodeCurrent: { background: HOME_COLORS.seal, color: HOME_COLORS.paper, borderColor: HOME_COLORS.seal },
-  levelNodeLocked: { cursor: "not-allowed", opacity: 0.45 },
+  chapterNodeSize: { fontFamily: HOME_FONT_SERIF, fontSize: 15, fontWeight: 700 },
+  chapterNodeProgress: { display: "flex", alignItems: "center", gap: 3, fontSize: 10.5, letterSpacing: "0.04em" },
+  chapterNodeUnlocked: { background: "#fff8ec", color: HOME_COLORS.ink, borderColor: HOME_COLORS.hairline },
+  chapterNodeMastered: { background: HOME_COLORS.bamboo, color: HOME_COLORS.paper, borderColor: HOME_COLORS.bamboo },
+  chapterNodeLocked: { cursor: "not-allowed", opacity: 0.45 },
+  historyLink: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    width: "100%",
+    marginTop: 22,
+    padding: "12px 0",
+    borderRadius: 10,
+    background: "transparent",
+    border: `1px solid ${HOME_COLORS.hairline}`,
+    color: HOME_COLORS.inkSoft,
+    fontFamily: HOME_FONT_SANS,
+    fontSize: 13,
+    cursor: "pointer",
+  },
 };

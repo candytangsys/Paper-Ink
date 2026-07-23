@@ -32,6 +32,10 @@ export default function Board({
   shakeKey,
   hintCell,
   onCellClick,
+  revealedCell,
+  rootCauseCell,
+  magnifierMode,
+  onMagnifierTap,
 }) {
   const n = puzzle.n;
   const { cellSize, gap: GAP, pad: PAD, fontSize, boardPx } = boardMetrics(n);
@@ -97,6 +101,12 @@ export default function Board({
     const { x, y } = localPoint(e);
     const cell = cellAtLocal(x, y);
     if (!cell) return;
+    // Magnifier mode consumes a single tap (no drag/draw) to reveal one
+    // cell's number, then the caller disarms it.
+    if (magnifierMode) {
+      onMagnifierTap && onMagnifierTap(cell.row, cell.col);
+      return;
+    }
     lastKeyRef.current = `${cell.row}_${cell.col}`;
     setDragPos({ x, y });
     setDragging(true);
@@ -238,6 +248,8 @@ export default function Board({
           const isClueOnly = !isFilled && puzzle.clueMap[key] !== undefined;
           const isCandidate = candidateSet.has(key);
           const isHintTarget = hintCell === key && !isFilled;
+          const isRevealed = !isFilled && !isClueOnly && revealedCell && revealedCell.key === key;
+          const isRootCause = !isFilled && rootCauseCell === key;
           const isHead =
             isFilled && filledOrder.length > 0 &&
             filledOrder[filledOrder.length - 1][0] === r &&
@@ -259,6 +271,21 @@ export default function Board({
             boxShadow = isHead
               ? `0 0 0 3px rgba(178,58,46,0.85), 0 2px 8px rgba(43,42,40,0.25)`
               : `0 1px 4px rgba(43,42,40,0.18)`;
+          } else if (isRootCause) {
+            // 溯源符 suggested alternate direction — distinct from hint's
+            // amber so the two tools never look interchangeable.
+            bg = "rgba(178,58,46,0.14)";
+            border = "2px solid #B23A2E";
+            color = "#B23A2E";
+            fontWeight = 700;
+            boxShadow = "0 0 0 4px rgba(178,58,46,0.2)";
+          } else if (isRevealed) {
+            // 放大鏡 (magnifier) reveal — a cool watermark tone, distinct
+            // from both hint (amber) and root-cause (vermillion).
+            bg = "rgba(91,124,153,0.14)";
+            border = "1.5px dashed rgba(91,124,153,0.75)";
+            color = "#3F5A73";
+            fontWeight = 700;
           } else if (isHintTarget) {
             bg = "rgba(184,146,90,0.18)";
             border = "2px solid #B8925A";
@@ -276,13 +303,15 @@ export default function Board({
             color = "#4C5B4E";
           }
 
+          const displayText = num || (isRevealed ? (revealedCell.num != null ? revealedCell.num : "?") : "");
+
           return (
             <button
               key={key}
               onClick={(e) => {
-                if (e.detail === 0) onCellClick(r, c);
+                if (e.detail === 0) (magnifierMode ? onMagnifierTap && onMagnifierTap(r, c) : onCellClick(r, c));
               }}
-              className={isShaking ? "ink-shake" : isHintTarget || isCandidate ? "ink-pulse" : ""}
+              className={isShaking ? "ink-shake" : isHintTarget || isCandidate || isRootCause ? "ink-pulse" : ""}
               style={{
                 ...styles.cell,
                 width: cellSize,
@@ -296,10 +325,11 @@ export default function Board({
                 position: "relative",
                 zIndex: 1,
                 touchAction: "none",
+                cursor: magnifierMode ? "crosshair" : "pointer",
                 WebkitTapHighlightColor: "transparent",
               }}
             >
-              {num || ""}
+              {displayText}
             </button>
           );
         })

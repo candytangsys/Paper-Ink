@@ -14,6 +14,8 @@ import { shareDaily } from "../daily/shareFlow.js";
 import { trackShareConversion } from "../daily/attribution.js";
 import { track } from "../analytics.js";
 import { recordLevelCompletion } from "../pwaInstall.js";
+import { parTimeSec, computeScore } from "../engine/score.mjs";
+import ScoreBreakdown from "./numberlink/ScoreBreakdown.jsx";
 
 const TEXT = {
   zh: {
@@ -43,6 +45,12 @@ const TEXT = {
     rescueConfirm: "觀看一段小短片以救回昨天的連續紀錄？（P0 暫以此對話框代替廣告）",
     rescueSuccess: "已救回！請完成今日題延續紀錄。",
     rescueFailed: "這次無法救回。",
+    scoreBase: "完成",
+    scoreTime: "速度",
+    scoreAccuracy: "準確度",
+    scoreNoHint: "無提示",
+    scoreMilestone: "里程碑",
+    scoreTotal: "積分",
   },
   en: {
     home: "Home",
@@ -71,6 +79,12 @@ const TEXT = {
     rescueConfirm: "Watch a short clip to rescue yesterday's streak? (P0 stand-in for the rewarded ad)",
     rescueSuccess: "Rescued! Finish today's puzzle to keep it going.",
     rescueFailed: "Couldn't rescue this time.",
+    scoreBase: "Complete",
+    scoreTime: "Speed",
+    scoreAccuracy: "Accuracy",
+    scoreNoHint: "No hint",
+    scoreMilestone: "Milestone",
+    scoreTotal: "Score",
   },
 };
 
@@ -94,6 +108,7 @@ export default function Daily({ date, onExit }) {
   const [streakStatus, setStreakStatus] = useState(() => streakStore.status(today));
   const [toast, setToast] = useState(null);
   const [rescuing, setRescuing] = useState(false);
+  const [lastScore, setLastScore] = useState(null);
   const toastTimeout = useRef(null);
 
   const puzzle = useMemo(() => {
@@ -109,10 +124,18 @@ export default function Daily({ date, onExit }) {
   }, []);
 
   const handleWin = useCallback(
-    ({ mistakes, timeSec }) => {
+    ({ mistakes, timeSec, usedTool }) => {
       const perfect = mistakes === 0;
-      recordDailyCompletion(date, { perfect, mistakes, timeSec, completedAt: Date.now() });
-      setJustCompleted({ date, entry: { perfect, mistakes, timeSec, completedAt: Date.now() } });
+      // Daily has no chapter/milestone concept of its own — score still
+      // applies (v3.1 scoring covers both modes) but the milestone bonus
+      // never fires here.
+      const clueRatio = Object.keys(puzzle.clueMap).length / puzzle.total;
+      const par = parTimeSec(puzzle.n, clueRatio);
+      const score = computeScore({ timeSec, parTimeSec: par, mistakes, usedTool, justHitMilestone: false });
+      const entry = { perfect, mistakes, timeSec, size: puzzle.n, score: score.total, completedAt: Date.now() };
+      recordDailyCompletion(date, entry);
+      setJustCompleted({ date, entry });
+      setLastScore(score);
 
       let status = streakStatus;
       if (isToday) {
@@ -126,6 +149,7 @@ export default function Daily({ date, onExit }) {
         time_sec: timeSec,
         mistakes,
         perfect,
+        score: score.total,
         streak: status ? status.streak : 0,
       }));
       recordLevelCompletion();
@@ -184,6 +208,45 @@ export default function Daily({ date, onExit }) {
     };
   }, []);
 
+  // Desktop keyboard shortcuts: Esc always goes home; the others only act
+  // while a puzzle is in progress (not on the recap card).
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const active = document.activeElement;
+      if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
+
+      if (e.key === "Escape") {
+        if (onExit) {
+          e.preventDefault();
+          onExit();
+        }
+        return;
+      }
+
+      if (historyEntry || !session.puzzle) return;
+
+      if (e.key === "Backspace") {
+        if (session.filledOrder.length > 0 && !session.won) {
+          e.preventDefault();
+          session.undo();
+        }
+      } else if (e.key === "r" || e.key === "R") {
+        if (session.filledOrder.length > 0 && !session.won) {
+          e.preventDefault();
+          session.restart();
+        }
+      } else if (e.key === "h" || e.key === "H" || e.key === "?") {
+        if (!session.won) {
+          e.preventDefault();
+          session.hint();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onExit, historyEntry, session.puzzle, session.filledOrder.length, session.won, session.undo, session.restart, session.hint]);
+
   const handleShare = useCallback(async () => {
     const entry = historyEntry;
     if (!entry || !puzzle) return;
@@ -234,7 +297,7 @@ export default function Daily({ date, onExit }) {
       <LangToggle />
       <div style={styles.wrap}>
         {onExit && (
-          <button onClick={onExit} style={homeBtnStyle} aria-label={t.home}>
+          <button onClick={onExit} style={homeBtnStyle} aria-label={t.home} title={`${t.home} (Esc)`}>
             <Home size={15} color={COLORS.inkSoft} />
             <span>{t.home}</span>
           </button>
@@ -256,7 +319,14 @@ export default function Daily({ date, onExit }) {
         )}
 
         {historyEntry ? (
-          <RecapCard entry={historyEntry} isToday={isToday} streakStatus={streakStatus} onShare={handleShare} t={t} />
+          <RecapCard
+            entry={historyEntry}
+            fullScore={justCompleted && justCompleted.date === date ? lastScore : null}
+            isToday={isToday}
+            streakStatus={streakStatus}
+            onShare={handleShare}
+            t={t}
+          />
         ) : (
           <GameArea session={session} t={t} />
         )}
@@ -299,15 +369,15 @@ function GameArea({ session, t }) {
       />
 
       <div style={styles.controlsRow}>
-        <button onClick={undo} style={styles.controlBtn} disabled={filledOrder.length === 0 || won}>
+        <button onClick={undo} style={styles.controlBtn} disabled={filledOrder.length === 0 || won} title={`${t.undo} (Backspace)`}>
           <Undo2 size={16} />
           <span>{t.undo}</span>
         </button>
-        <button onClick={hint} style={styles.controlBtn} disabled={won}>
+        <button onClick={hint} style={styles.controlBtn} disabled={won} title={`${t.hintBtn} (H)`}>
           <Lightbulb size={16} />
           <span>{t.hintBtn}</span>
         </button>
-        <button onClick={restart} style={styles.controlBtn} disabled={filledOrder.length === 0 || won}>
+        <button onClick={restart} style={styles.controlBtn} disabled={filledOrder.length === 0 || won} title={`${t.retry} (R)`}>
           <RotateCcw size={16} />
           <span>{t.retry}</span>
         </button>
@@ -316,14 +386,24 @@ function GameArea({ session, t }) {
   );
 }
 
-function RecapCard({ entry, isToday, streakStatus, onShare, t }) {
+function RecapCard({ entry, fullScore, isToday, streakStatus, onShare, t }) {
   return (
     <div style={styles.recapCard}>
       <Feather size={26} color="#B23A2E" />
       <div style={styles.recapTitle}>{isToday ? t.alreadyDoneTitle : t.alreadyDoneTitlePast}</div>
       <div style={styles.recapStats}>
         {fmtTime(entry.timeSec)} · {entry.perfect ? t.perfectBadge : t.mistakesLabel(entry.mistakes)}
+        {entry.score != null && !fullScore && ` · ${t.scoreTotal} ${entry.score}`}
       </div>
+      {fullScore && (
+        <ScoreBreakdown
+          score={fullScore}
+          labels={{
+            base: t.scoreBase, time: t.scoreTime, accuracy: t.scoreAccuracy,
+            noHint: t.scoreNoHint, milestone: t.scoreMilestone, total: t.scoreTotal,
+          }}
+        />
+      )}
       {isToday && streakStatus.streak >= 2 && (
         <div style={styles.recapStreak}>
           <Flame size={15} color={COLORS.ochre} />

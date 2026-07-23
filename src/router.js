@@ -1,7 +1,10 @@
 import { isValidDateStr, clampToToday, todayUTCString } from "./dateUtil.js";
 
-const ROUTES = new Set(["number-link"]);
+const ROUTES = new Set(["number-link", "history"]);
 const DAILY_ROUTE = /^daily(?:\/(\d{4}-\d{2}-\d{2}))?$/;
+// The captured number's meaning changed from a fixed level-array index to a
+// chapter board size (v3.1 restructure) — the route shape itself is
+// unchanged, so this regex and the `level` field name stay as-is.
 const NUMBERLINK_ROUTE = /^number-link(?:\/(\d+))?$/;
 
 export function routeFromHash(hash = typeof window !== "undefined" ? window.location.hash : "") {

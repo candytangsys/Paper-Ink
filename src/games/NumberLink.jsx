@@ -5,7 +5,13 @@ import { useLanguage } from "../i18n.jsx";
 import LangToggle from "../components/LangToggle.jsx";
 import Board from "./numberlink/Board.jsx";
 import { useGameSession } from "./numberlink/useGameSession.js";
+import ScoreBreakdown from "./numberlink/ScoreBreakdown.jsx";
 import { fmtTime } from "../engine/share.mjs";
+import { generateHamiltonianPath, pickClueIndices, hasDiagonalStep } from "../engine/hamiltonian.mjs";
+import { CHAPTERS, CONTROLS_HIDDEN_SIZES, DIAGONAL_FORCED_SIZES, clueRatioForClear, nextChapterSize } from "../engine/chapters.mjs";
+import { parTimeSec, computeScore } from "../engine/score.mjs";
+import { getChapterEntry, isChapterUnlocked, recordChapterClear, willHitMilestoneOnNextClear } from "../chapterProgress.js";
+import { recordLevelHistoryEntry } from "../levelHistory.js";
 import { getTutorialVariant } from "../tutorialVariant.js";
 import { track } from "../analytics.js";
 import { recordLevelCompletion } from "../pwaInstall.js";
@@ -13,6 +19,7 @@ import { recordLevelCompletion } from "../pwaInstall.js";
 const TEXT = {
   zh: {
     level: (n) => `第 ${n} 關`,
+    chapterLabel: (size) => `${size} × ${size} 章節`,
     perfect: "完美",
     backToLevels: "返回主畫面",
     regenerate: "重新出題",
@@ -23,16 +30,24 @@ const TEXT = {
     steps: (n) => `${n} 步`,
     mistakes: (n) => `${n} 失誤`,
     mistakesLabel: (n) => (n === 0 ? "零失誤" : `${n} 次失誤`),
-    bestRecord: (time, mistakes) => `最佳紀錄 ${time} · ${mistakes}`,
+    bestScore: (score) => `本章節最佳 ${score} 分`,
     hintStuck: "目前走法已經無法完成，試試回退或重來一次",
     playAgain: "再玩一次",
     nextLevel: "下一關",
     backToMenu: "返回主畫面",
     loading: "研墨中…",
+    unlocked: (size) => `🎉 解鎖新章節：${size} × ${size}`,
+    scoreBase: "完成",
+    scoreTime: "速度",
+    scoreAccuracy: "準確度",
+    scoreNoHint: "無提示",
+    scoreMilestone: "里程碑",
+    scoreTotal: "本關積分",
     abHints: { 2: "斜角也能走", 5: "按住可一筆滑過", 7: "卡住了？試試回退或提示" },
   },
   en: {
     level: (n) => `Level ${n}`,
+    chapterLabel: (size) => `${size} × ${size} Chapter`,
     perfect: "Perfect",
     backToLevels: "Back to Home",
     regenerate: "New puzzle",
@@ -43,12 +58,19 @@ const TEXT = {
     steps: (n) => `${n} moves`,
     mistakes: (n) => `${n} mistakes`,
     mistakesLabel: (n) => (n === 0 ? "No mistakes" : `${n} mistakes`),
-    bestRecord: (time, mistakes) => `Best ${time} · ${mistakes}`,
+    bestScore: (score) => `Chapter best ${score} pts`,
     hintStuck: "This path can't be completed anymore — try undo or retry",
     playAgain: "Play again",
     nextLevel: "Next level",
     backToMenu: "Back to Home",
     loading: "Grinding ink…",
+    unlocked: (size) => `🎉 New chapter unlocked: ${size} × ${size}`,
+    scoreBase: "Complete",
+    scoreTime: "Speed",
+    scoreAccuracy: "Accuracy",
+    scoreNoHint: "No hint",
+    scoreMilestone: "Milestone",
+    scoreTotal: "Score",
     abHints: { 2: "Diagonal moves work too", 5: "Press and hold to trace in one stroke", 7: "Stuck? Try undo or hint" },
   },
 };
@@ -61,152 +83,22 @@ const TEXT = {
    press and drag to draw the whole trail in one stroke.
    Literary "ink on paper" (文青) visual direction.
 
-   Levels 1-10 are the guided tutorial (F4): level 1 is
-   trivial, levels 2-3 force a diagonal step in the solution,
-   levels 4-6 taper off clues on a 4x4 board, and undo/hint
-   stay hidden until level 7 so early levels are pure
-   deduction practice.
+   v3.1: regular levels are grouped into size-based chapters
+   (大關卡) with infinite randomly-generated small levels
+   (小關卡) inside each — there's no fixed level count anymore.
+   Clue density decreases with each chapter clear (see
+   engine/chapters.mjs) until a floor is reached at
+   CHAPTER_MILESTONE clears, which is also when the next
+   chapter unlocks. "第幾關" is just a clear-count display,
+   not a stable level identity.
 --------------------------------------------------------- */
-
-// Each level: { size, clues }. Bigger boards get more levels, and within
-// one size the clue count drops step by step so the deduction gets harder.
-// 28 levels total.
-const LEVELS = [
-  { size: 2, clues: 4 }, // 1  · 起手
-  { size: 3, clues: 6 }, // 2  · 斜角必經
-  { size: 3, clues: 4 }, // 3  · 斜角必經
-  { size: 4, clues: 8 }, // 4
-  { size: 4, clues: 6 }, // 5
-  { size: 4, clues: 5 }, // 6
-  { size: 5, clues: 10 }, // 7  · undo/hint 起解禁
-  { size: 5, clues: 8 }, // 8
-  { size: 5, clues: 6 }, // 9
-  { size: 6, clues: 13 }, // 10
-  { size: 6, clues: 10 }, // 11
-  { size: 6, clues: 8 }, // 12
-  { size: 6, clues: 6 }, // 13
-  { size: 7, clues: 15 }, // 14
-  { size: 7, clues: 12 }, // 15
-  { size: 7, clues: 9 }, // 16
-  { size: 7, clues: 7 }, // 17
-  { size: 8, clues: 18 }, // 18
-  { size: 8, clues: 14 }, // 19
-  { size: 8, clues: 11 }, // 20
-  { size: 8, clues: 9 }, // 21
-  { size: 8, clues: 7 }, // 22
-  { size: 9, clues: 20 }, // 23
-  { size: 9, clues: 16 }, // 24
-  { size: 9, clues: 13 }, // 25
-  { size: 9, clues: 10 }, // 26
-  { size: 9, clues: 8 }, // 27
-  { size: 9, clues: 6 }, // 28 · 留白
-];
-const STORAGE_KEY = "numberlink_progress_v1";
-// Exposed so Home.jsx's F7 level-progress grid can mirror the same total
-// and progress data without duplicating the LEVELS table.
-export const LEVEL_COUNT = LEVELS.length;
-export const NUMBERLINK_STORAGE_KEY = STORAGE_KEY;
-const CONTROLS_UNLOCK_LEVEL = 7;
-const DIAGONAL_FORCED_LEVELS = new Set([2, 3]);
-
-/* ---------- puzzle generation ---------- */
-
-const DIRS_8 = [
-  [0, 1],
-  [0, -1],
-  [1, 0],
-  [-1, 0],
-  [1, 1],
-  [1, -1],
-  [-1, 1],
-  [-1, -1],
-];
-
-function generateHamiltonianPath(n, stepBudget = 20000) {
-  const total = n * n;
-  const visited = Array.from({ length: n }, () => Array(n).fill(false));
-  const path = [];
-  let steps = 0;
-
-  function neighborsOf(r, c) {
-    const dirs = DIRS_8;
-    const res = [];
-    for (const [dr, dc] of dirs) {
-      const nr = r + dr,
-        nc = c + dc;
-      if (nr >= 0 && nr < n && nc >= 0 && nc < n && !visited[nr][nc]) res.push([nr, nc]);
-    }
-    return res;
-  }
-
-  function dfs(r, c, depth) {
-    steps++;
-    if (steps > stepBudget) return "TIMEOUT";
-    visited[r][c] = true;
-    path.push([r, c]);
-    if (depth === total) return true;
-
-    let nbrs = neighborsOf(r, c).map((p) => ({ p, deg: neighborsOf(p[0], p[1]).length }));
-    for (let i = nbrs.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [nbrs[i], nbrs[j]] = [nbrs[j], nbrs[i]];
-    }
-    nbrs.sort((a, b) => a.deg - b.deg);
-
-    for (const { p } of nbrs) {
-      const result = dfs(p[0], p[1], depth + 1);
-      if (result === "TIMEOUT") return "TIMEOUT";
-      if (result) return true;
-    }
-    visited[r][c] = false;
-    path.pop();
-    return false;
-  }
-
-  const sr = Math.floor(Math.random() * n);
-  const sc = Math.floor(Math.random() * n);
-  const result = dfs(sr, sc, 1);
-  return result === true ? path : null;
-}
-
-function pickClueIndices(total, k) {
-  const set = new Set([1, total]);
-  const need = k - set.size;
-  if (need > 0) {
-    const step = (total - 1) / (need + 1);
-    for (let i = 1; i <= need; i++) {
-      let idx = Math.round(1 + step * i);
-      if (idx <= 1) idx = 2;
-      if (idx >= total) idx = total - 1;
-      set.add(idx);
-    }
-  }
-  let attempts = 0;
-  while (set.size < k && attempts < 80 && total > 2) {
-    const cand = 2 + Math.floor(Math.random() * Math.max(1, total - 2));
-    set.add(cand);
-    attempts++;
-  }
-  return set;
-}
-
-// True once the solution requires at least one diagonal step, so a player
-// can't clear the level with only orthogonal reasoning.
-function hasDiagonalStep(path) {
-  for (let i = 1; i < path.length; i++) {
-    const [pr, pc] = path[i - 1];
-    const [r, c] = path[i];
-    if (Math.abs(r - pr) === 1 && Math.abs(c - pc) === 1) return true;
-  }
-  return false;
-}
 
 function buildPuzzle(n, clues, { requireDiagonal = false } = {}) {
   let path = null;
   let tries = 0;
   const maxTries = requireDiagonal ? 60 : 30;
   while (tries < maxTries) {
-    const candidate = generateHamiltonianPath(n);
+    const candidate = generateHamiltonianPath(n, Math.random, 20000);
     tries++;
     if (candidate && (!requireDiagonal || hasDiagonalStep(candidate))) {
       path = candidate;
@@ -227,59 +119,66 @@ function buildPuzzle(n, clues, { requireDiagonal = false } = {}) {
 
 /* ---------- main component ---------- */
 
-export default function NumberLink({ onExit, initialLevel = null }) {
+export default function NumberLink({ onExit, initialSize = null }) {
   const { lang } = useLanguage();
   const t = TEXT[lang];
-  const [unlockedLevel, setUnlockedLevel] = useState(1);
-  const [best, setBest] = useState({});
   const [loaded, setLoaded] = useState(false);
-  const [levelIndex, setLevelIndex] = useState(1);
+  const [chapterSize, setChapterSize] = useState(null);
+  const [chapterClearCount, setChapterClearCount] = useState(0);
+  const [bestScore, setBestScore] = useState(null);
+  const [lastScore, setLastScore] = useState(null);
+  const [justUnlocked, setJustUnlocked] = useState(null);
   const variant = getTutorialVariant();
 
-  /* load progress */
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const data = JSON.parse(raw);
-        if (data.unlockedLevel) setUnlockedLevel(data.unlockedLevel);
-        if (data.best) setBest(data.best);
-      }
-    } catch (e) {
-      /* no saved progress yet */
-    }
-    setLoaded(true);
+  // Metadata about the puzzle currently in play, needed at win time to
+  // compute par time (par depends on the clue ratio actually used).
+  const puzzleMetaRef = useRef({ size: null, clueRatio: null });
+
+  const startChapterLevel = useCallback((size) => {
+    const { chapterClearCount: clearCount, bestScore: best } = getChapterEntry(size);
+    const ratio = clueRatioForClear(size, clearCount);
+    const total = size * size;
+    const clues = Math.max(2, Math.round(total * ratio));
+    const requireDiagonal = DIAGONAL_FORCED_SIZES.has(size);
+    const p = buildPuzzle(size, clues, { requireDiagonal });
+    puzzleMetaRef.current = { size, clueRatio: clues / total };
+    setChapterSize(size);
+    setChapterClearCount(clearCount);
+    setBestScore(best);
+    setLastScore(null);
+    setJustUnlocked(null);
+    session.start(p);
+    track("tutorial_level_start", { size, clear_count: clearCount });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const saveProgress = useCallback((nextUnlocked, nextBest) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ unlockedLevel: nextUnlocked, best: nextBest }));
-    } catch (e) {
-      /* storage unavailable, ignore */
-    }
+  const handleWin = useCallback(({ mistakes: finalMistakes, timeSec: finalTime, usedTool }) => {
+    const { size, clueRatio } = puzzleMetaRef.current;
+    const par = parTimeSec(size, clueRatio);
+    const justHitMilestone = willHitMilestoneOnNextClear(size);
+    const score = computeScore({
+      timeSec: finalTime, parTimeSec: par, mistakes: finalMistakes, usedTool, justHitMilestone,
+    });
+    const { chapterClearCount: newCount, justHitMilestone: confirmedMilestone } = recordChapterClear(size, score.total);
+    recordLevelHistoryEntry({
+      size,
+      chapterClearIndex: newCount,
+      timeSec: finalTime,
+      mistakes: finalMistakes,
+      score: score.total,
+      perfect: finalMistakes === 0,
+      completedAt: Date.now(),
+    });
+    track("tutorial_level_complete", {
+      size, clear_count: newCount, time_sec: finalTime, mistakes: finalMistakes, score: score.total,
+    });
+    recordLevelCompletion();
+    setChapterClearCount(newCount);
+    setLastScore(score);
+    setBestScore((prev) => (prev == null ? score.total : Math.max(prev, score.total)));
+    const next = confirmedMilestone ? nextChapterSize(size) : null;
+    setJustUnlocked(next);
   }, []);
-
-  const handleWin = useCallback(
-    ({ mistakes: finalMistakes, timeSec: finalTime }) => {
-      track("tutorial_level_complete", { level: levelIndex, time_sec: finalTime, mistakes: finalMistakes });
-      if (levelIndex === LEVELS.length) track("tutorial_complete", {});
-      recordLevelCompletion();
-      setBest((prevBest) => {
-        const prev = prevBest[levelIndex];
-        const candidate = { mistakes: finalMistakes, time: finalTime };
-        const better =
-          !prev || candidate.mistakes < prev.mistakes || (candidate.mistakes === prev.mistakes && candidate.time < prev.time);
-        const nextBest = better ? { ...prevBest, [levelIndex]: candidate } : prevBest;
-        setUnlockedLevel((prevUnlocked) => {
-          const nextUnlocked = Math.max(prevUnlocked, Math.min(LEVELS.length, levelIndex + 1));
-          saveProgress(nextUnlocked, nextBest);
-          return nextUnlocked;
-        });
-        return nextBest;
-      });
-    },
-    [levelIndex, saveProgress]
-  );
 
   const session = useGameSession({
     onWin: handleWin,
@@ -287,36 +186,29 @@ export default function NumberLink({ onExit, initialLevel = null }) {
     onUndoUsed: () => track("undo_used", { context: "tutorial" }),
   });
 
-  const startLevel = useCallback(
-    (lvl) => {
-      const spec = LEVELS[lvl - 1];
-      const p = buildPuzzle(spec.size, spec.clues, { requireDiagonal: DIAGONAL_FORCED_LEVELS.has(lvl) });
-      setLevelIndex(lvl);
-      session.start(p);
-      track("tutorial_level_start", { level: lvl });
-    },
-    [session.start]
-  );
-
-  // NumberLink no longer has its own level-select screen — Home's level grid
-  // is the sole entry point and always deep-links a specific level. Start it
-  // once per navigation; if it's missing, out of range, or still locked,
-  // there's nothing to show here, so bounce back to Home instead.
-  const autoStartedLevelRef = useRef();
+  // NumberLink no longer has its own chapter-select screen — Home's chapter
+  // list is the sole entry point and always deep-links a specific chapter
+  // (board size). Start it once per navigation; if it's missing, not a
+  // known chapter size, or still locked, there's nothing to show here, so
+  // bounce back to Home instead.
+  const autoStartedSizeRef = useRef();
+  useEffect(() => {
+    setLoaded(true);
+  }, []);
   useEffect(() => {
     if (!loaded) return;
-    if (autoStartedLevelRef.current === initialLevel) return;
-    autoStartedLevelRef.current = initialLevel;
-    if (initialLevel != null && initialLevel >= 1 && initialLevel <= LEVELS.length && initialLevel <= unlockedLevel) {
-      startLevel(initialLevel);
+    if (autoStartedSizeRef.current === initialSize) return;
+    autoStartedSizeRef.current = initialSize;
+    if (initialSize != null && CHAPTERS.includes(initialSize) && isChapterUnlocked(initialSize)) {
+      startChapterLevel(initialSize);
     } else {
       onExit && onExit();
     }
-  }, [initialLevel, loaded, unlockedLevel, startLevel, onExit]);
+  }, [initialSize, loaded, startChapterLevel, onExit]);
 
   const regenerate = useCallback(() => {
-    startLevel(levelIndex);
-  }, [levelIndex, startLevel]);
+    if (chapterSize != null) startChapterLevel(chapterSize);
+  }, [chapterSize, startChapterLevel]);
 
   if (!loaded) {
     return (
@@ -331,15 +223,17 @@ export default function NumberLink({ onExit, initialLevel = null }) {
       <div style={inkWashStyle} />
       <LangToggle />
       <GameScreen
-        levelIndex={levelIndex}
+        chapterSize={chapterSize}
+        chapterClearCount={chapterClearCount}
+        bestScore={bestScore}
+        lastScore={lastScore}
+        justUnlocked={justUnlocked}
         session={session}
-        best={best[levelIndex]}
         variant={variant}
         onRegenerate={regenerate}
         onBack={onExit}
-        onNextLevel={() => startLevel(Math.min(LEVELS.length, levelIndex + 1))}
+        onNextLevel={() => startChapterLevel(chapterSize)}
         onReplay={session.restart}
-        hasNextLevel={levelIndex < LEVELS.length}
         t={t}
       />
     </div>
@@ -348,15 +242,19 @@ export default function NumberLink({ onExit, initialLevel = null }) {
 
 /* ---------- screens ---------- */
 
-function GameScreen({ levelIndex, session, best, variant, onRegenerate, onBack, onNextLevel, onReplay, hasNextLevel, t }) {
+function GameScreen({
+  chapterSize, chapterClearCount, bestScore, lastScore, justUnlocked,
+  session, variant, onRegenerate, onBack, onNextLevel, onReplay, t,
+}) {
   const {
     puzzle, filledOrder, filledSet, candidateSet, taps, mistakes, elapsed, won,
     shakeKey, hintCell, hintStuck, advanceTo, undo, hint,
   } = session;
   if (!puzzle) return null;
   const nextNum = filledOrder.length + 1;
-  const showControls = levelIndex >= CONTROLS_UNLOCK_LEVEL;
-  const abHint = variant === "B" ? t.abHints[levelIndex] : null;
+  const showControls = !CONTROLS_HIDDEN_SIZES.has(chapterSize);
+  const displayLevel = chapterClearCount + 1;
+  const abHint = variant === "B" ? t.abHints[displayLevel] : null;
 
   return (
     <div style={styles.gameWrap}>
@@ -365,7 +263,7 @@ function GameScreen({ levelIndex, session, best, variant, onRegenerate, onBack, 
           <ArrowLeft size={18} color="#5A564C" />
         </button>
         <div style={styles.gameHeaderCenter}>
-          <div style={styles.gameLevelLabel}>{t.level(levelIndex)}</div>
+          <div style={styles.gameLevelLabel}>{t.chapterLabel(chapterSize)} · {t.level(displayLevel)}</div>
           <div style={styles.gameNext}>{won ? t.solved : t.nextStroke(nextNum)}</div>
         </div>
         <button onClick={onRegenerate} style={styles.iconBtn} aria-label={t.regenerate}>
@@ -414,22 +312,22 @@ function GameScreen({ levelIndex, session, best, variant, onRegenerate, onBack, 
             <div style={styles.winStats}>
               {fmtTime(elapsed)} · {t.steps(taps)} · {t.mistakesLabel(mistakes)}
             </div>
-            {best && (
-              <div style={styles.winBest}>{t.bestRecord(fmtTime(best.time), t.mistakesLabel(best.mistakes))}</div>
-            )}
+            <ScoreBreakdown
+              score={lastScore}
+              labels={{
+                base: t.scoreBase, time: t.scoreTime, accuracy: t.scoreAccuracy,
+                noHint: t.scoreNoHint, milestone: t.scoreMilestone, total: t.scoreTotal,
+              }}
+            />
+            {bestScore != null && <div style={styles.winBest}>{t.bestScore(bestScore)}</div>}
+            {justUnlocked != null && <div style={styles.unlockBanner}>{t.unlocked(justUnlocked)}</div>}
             <div style={styles.winActions}>
               <button onClick={onReplay} style={styles.winBtnGhost}>
                 {t.playAgain}
               </button>
-              {hasNextLevel ? (
-                <button onClick={onNextLevel} style={styles.winBtnSolid}>
-                  {t.nextLevel}
-                </button>
-              ) : (
-                <button onClick={onBack} style={styles.winBtnSolid}>
-                  {t.backToMenu}
-                </button>
-              )}
+              <button onClick={onNextLevel} style={styles.winBtnSolid}>
+                {t.nextLevel}
+              </button>
             </div>
           </div>
         </div>
@@ -615,6 +513,13 @@ const styles = {
     fontSize: 12.5,
     color: "#8B8478",
     fontFamily: "'EB Garamond', serif",
+    letterSpacing: 1,
+  },
+  unlockBanner: {
+    marginTop: 12,
+    fontSize: 13,
+    color: "#6E8E86",
+    fontFamily: "'Noto Serif TC', serif",
     letterSpacing: 1,
   },
   winActions: {
