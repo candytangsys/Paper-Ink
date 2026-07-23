@@ -1,5 +1,5 @@
 import { useMemo, useEffect } from "react";
-import { Check, Lock, History, Coins, BookOpen } from "lucide-react";
+import { Check, Lock, History, Coins, BookOpen, CalendarDays } from "lucide-react";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "./LangToggle.jsx";
 import { HOME_COLORS, HOME_FONT_SERIF, HOME_FONT_SANS, HOME_FONT_MONO } from "../homeTheme.js";
@@ -34,6 +34,7 @@ const TEXT = {
     chapterSize: (size) => `${size} × ${size}`,
     chapterProgress: (count) => `第 ${count + 1} 關`,
     historyLink: "個人歷史紀錄",
+    calendarLink: "挑戰行事曆",
     rulesLink: "玩法說明",
     pointsLabel: "積分",
   },
@@ -49,6 +50,7 @@ const TEXT = {
     chapterSize: (size) => `${size} × ${size}`,
     chapterProgress: (count) => `Level ${count + 1}`,
     historyLink: "History",
+    calendarLink: "Calendar",
     rulesLink: "How to Play",
     pointsLabel: "Points",
   },
@@ -198,6 +200,10 @@ export default function Home({ onSelect }) {
           <button onClick={() => onSelect("history")} style={styles.historyLink}>
             <History size={14} />
             <span>{t.historyLink}</span>
+          </button>
+          <button onClick={() => onSelect("calendar")} style={styles.historyLink}>
+            <CalendarDays size={14} />
+            <span>{t.calendarLink}</span>
           </button>
           <button onClick={() => onSelect("rules")} style={styles.historyLink}>
             <BookOpen size={14} />
@@ -398,22 +404,23 @@ const styles = {
   chapterNodeLocked: { cursor: "not-allowed", opacity: 0.45 },
   linkRow: {
     display: "flex",
-    gap: 10,
+    gap: 8,
     marginTop: 22,
   },
   historyLink: {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
+    gap: 5,
     flex: 1,
-    padding: "12px 0",
+    padding: "12px 4px",
     borderRadius: 10,
     background: "transparent",
     border: `1px solid ${HOME_COLORS.hairline}`,
     color: HOME_COLORS.inkSoft,
     fontFamily: HOME_FONT_SANS,
-    fontSize: 13,
+    fontSize: 11.5,
+    whiteSpace: "nowrap",
     cursor: "pointer",
   },
 };

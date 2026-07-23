@@ -192,7 +192,6 @@ export default function NumberLink({ onExit, initialSize = null }) {
 
   const session = useGameSession({
     onWin: handleWin,
-    onHintUsed: (info) => track("hint_used", { context: "tutorial", salvageable: info?.salvageable }),
     onUndoUsed: () => track("undo_used", { context: "tutorial" }),
   });
 

@@ -12,9 +12,9 @@ import { track } from "../../analytics.js";
 import { isDesktopViewport } from "../../deviceUtil.js";
 
 /* ---------------------------------------------------------
-   Shared in-game play surface (v3.2): left rail (points +
-   zoom), board column (start hint / stuck banners / Board),
-   right rail (5 paid tools), bottom row (回退/重來). One
+   Shared in-game play surface (v3.2): left rail (points),
+   board column (start hint / stuck banner / Board), right
+   rail (5 paid tools), bottom row (回退/重來). One
    implementation for both NumberLink.jsx and Daily.jsx so the
    two never drift apart again — Daily was the layout baseline.
 
@@ -33,8 +33,7 @@ const TEXT = {
     retryRemaining: (n) => (n > 0 ? `今日還可重來 ${n} 次` : "今日重來次數已用完"),
     startHint: "點擊「1」開始畫線",
     pointsLabel: "積分",
-    hintStuck: "目前走法已經無法完成，試試回退或重來一次",
-    stuckPrompt: "目前走法可能已經卡住了",
+    stuckPrompt: "目前走法已經卡住了，建議回退或重來一次",
     useToolBtn: "使用道具",
     dismissBtn: "忽略",
     cancelBtn: "取消",
@@ -56,8 +55,7 @@ const TEXT = {
     retryRemaining: (n) => (n > 0 ? `${n} retries left today` : "No retries left today"),
     startHint: "Tap “1” to start drawing",
     pointsLabel: "Points",
-    hintStuck: "This path can't be completed anymore — try undo or retry",
-    stuckPrompt: "This path may already be stuck",
+    stuckPrompt: "This path is stuck — try undo or retry",
     useToolBtn: "Use tool",
     dismissBtn: "Dismiss",
     cancelBtn: "Cancel",
@@ -80,7 +78,7 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
   const t = TEXT[lang];
   const {
     puzzle, filledOrder, filledSet, candidateSet, won,
-    shakeKey, hintCell, hintStuck, revealedCell, rootCause, previewCells, stuckBannerVisible,
+    shakeKey, revealedCell, rootCause, previewCells, stuckBannerVisible,
     advanceTo, undo, restart, revealCell, traceRootCause, placeNextCell, previewPath, freezeTime, dismissStuckBanner,
   } = session;
 
@@ -179,7 +177,6 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
 
         <div style={styles.boardColumn}>
           {filledOrder.length === 0 && !won && <div style={styles.startHint}>{t.startHint}</div>}
-          {hintStuck && <div style={styles.hintStuckBanner}>{t.hintStuck}</div>}
           {showTools && stuckBannerVisible && (
             <div style={styles.stuckBanner}>
               <span>{t.stuckPrompt}</span>
@@ -198,7 +195,6 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
             candidateSet={candidateSet}
             won={won}
             shakeKey={shakeKey}
-            hintCell={hintCell}
             onCellClick={advanceTo}
             revealedCell={revealedCell}
             rootCauseCell={rootCause ? rootCause.suggestedCell : null}
@@ -322,18 +318,6 @@ const styles = {
     marginBottom: 12,
     fontSize: 12.5,
     color: "#6E8E86",
-    fontFamily: "'Noto Serif TC', serif",
-    letterSpacing: 1,
-    textAlign: "center",
-  },
-  hintStuckBanner: {
-    marginBottom: 16,
-    padding: "8px 14px",
-    borderRadius: 4,
-    background: "rgba(178,58,46,0.08)",
-    border: "1px solid rgba(178,58,46,0.3)",
-    fontSize: 12.5,
-    color: "#B23A2E",
     fontFamily: "'Noto Serif TC', serif",
     letterSpacing: 1,
     textAlign: "center",

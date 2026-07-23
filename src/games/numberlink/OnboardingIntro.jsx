@@ -251,7 +251,7 @@ const TEXT = {
     steps: [
       { title: "① 連線", caption: "依序點擊數字 1 → N，可上下左右斜角八個方向移動；按住拖曳能一筆畫完。" },
       { title: "② 回退與重來", caption: "點錯了嗎？回退可收回一步；重來能清空重新挑戰同一題。", undo: "回退", retry: "重來" },
-      { title: "③ 自動提示", caption: "卡住的時候，停下來幾秒後會自動標出下一步，完全免費、不用按任何按鈕。" },
+      { title: "③ 卡關提醒", caption: "如果走法已經卡死，停頓幾秒後系統會提醒你，說明可能需要回退或重來一次。" },
       { title: "④ 道具與積分", caption: "完成關卡會累積積分，右側 5 種道具可用積分或看廣告解鎖，助你度過難關。" },
     ],
     prev: "上一步",
@@ -264,7 +264,7 @@ const TEXT = {
     steps: [
       { title: "① Connect", caption: "Tap numbers 1 → N in order — 8-directional moves including diagonals. Press and hold to draw the whole stroke." },
       { title: "② Undo & Retry", caption: "Tapped the wrong cell? Undo takes back one step; Retry clears the board and restarts the same puzzle.", undo: "Undo", retry: "Retry" },
-      { title: "③ Auto-Hint", caption: "Stuck? Pause a few seconds and the next move gets marked automatically — free, no button needed." },
+      { title: "③ Stuck Reminder", caption: "Hit a dead end? After a short pause the game lets you know — it may be time to undo or retry." },
       { title: "④ Tools & Points", caption: "Clearing puzzles earns points. 5 tools on the right can be unlocked with points or a quick ad when you need help." },
     ],
     prev: "Back",

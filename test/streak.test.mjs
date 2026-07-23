@@ -67,17 +67,16 @@ test("completing today after a rescue increments the streak", () => {
   assert.equal(status.streak, 3);
 });
 
-test("a second rescue in the same month is rejected", () => {
+test("a second rescue in the same month is allowed (no monthly cap)", () => {
   const store = createStreakStore(memoryStorage());
   store.recordCompletion("2026-08-01");
   store.recordCompletion("2026-08-02");
-  store.rescue("2026-08-04"); // first rescue, uses up the monthly allowance
+  store.rescue("2026-08-04"); // first rescue
   store.recordCompletion("2026-08-04");
   store.recordCompletion("2026-08-05");
   // break again within the same month, with a valid "yesterday" gap
   const result = store.rescue("2026-08-07");
-  assert.equal(result.success, false);
-  assert.equal(result.reason, "monthly_limit");
+  assert.equal(result.success, true);
 });
 
 test("status reports milestones once the streak reaches them", () => {

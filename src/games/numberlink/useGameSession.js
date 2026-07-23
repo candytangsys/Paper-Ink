@@ -18,19 +18,15 @@ const DIRS_8 = [
   [1, 1], [1, -1], [-1, 1], [-1, -1],
 ];
 
-// Background stuck-check budget (v3.1 §一之4a) — deliberately much lower
-// than findCompletion's default so it can run after every single move
-// without noticeable jank, especially on a 16x16 board. A cheaper budget
-// means more "unknown" (timeout) results, which the caller treats as "not
-// stuck" — false negatives are fine here, a laggy board on every tap isn't.
-const QUICK_CHECK_BUDGET = 20000;
-
-// v3.2: 提示 is no longer a manual button — it auto-fires this long after
-// the player's last action, for free, so a genuinely-thinking player gets
-// nudged without having to ask. Reset on every move (advanceTo/undo) and
-// every other tool use; not started until the first tap (so it never
-// fires on the "tap 1 to start" empty board).
-const IDLE_AUTO_HINT_MS = 6000;
+// v3.3: the game no longer auto-marks the next cell for you. Instead, this
+// long after the player's last action, it silently re-checks whether the
+// *current* path is a genuine dead end — if so, it surfaces the "you're
+// stuck" banner (suggesting undo/retry/a tool) instead of giving away any
+// solution info. Reset on every move (advanceTo/undo) and every tool use,
+// so it only fires after a real pause, and every path mutation hides any
+// stale banner immediately (see setPath) so it's never shown for a
+// position the player has already moved on from.
+const STUCK_REMINDER_IDLE_MS = 6000;
 
 // 靜心符 (v3.2): flat refund off the counted elapsed time.
 const FREEZE_REFUND_SEC = 15;
@@ -104,9 +100,9 @@ function findCompletion(puzzle, order, stepBudget = 150000) {
 // Returns *some* full 1..total completion consistent with the player's
 // current path `order` — the untouched canonical puzzle.path if they
 // haven't diverged from it yet (cheap, no search), otherwise a fresh
-// findCompletion() search. Shared by hint(), revealCell(), and
-// traceRootCause(), all of which just need "a valid way to finish from
-// here," not necessarily the original solution.
+// findCompletion() search. Shared by revealCell(), traceRootCause(), and
+// placeNextCell()/previewPath(), all of which just need "a valid way to
+// finish from here," not necessarily the original solution.
 function completionFrom(puzzle, order, stepBudget) {
   if (order.length === 0) return puzzle.path;
   const canonicalPrefix = puzzle.path.slice(0, order.length);
@@ -142,50 +138,44 @@ export function traceRootCauseFrom(puzzle, order) {
   return { lastGoodStep: lo, suggestedCell: suggested ? `${suggested[0]}_${suggested[1]}` : null };
 }
 
-export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
+export function useGameSession({ onWin, onUndoUsed } = {}) {
   const [puzzle, setPuzzleState] = useState(null);
   const [filledOrder, setFilledOrder] = useState([]);
   const pathRef = useRef([]);
   const [taps, setTaps] = useState(0);
   const [mistakes, setMistakes] = useState(0);
-  const [hints, setHints] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [won, setWon] = useState(false);
   const wonRef = useRef(false);
   const [shakeKey, setShakeKey] = useState(null);
   const shakeTimeout = useRef(null);
-  const [hintCell, setHintCell] = useState(null);
-  const [hintStuck, setHintStuck] = useState(false);
   // Magnifier (放大鏡, v3.1 §一之3): revealed number for an arbitrary
   // tapped cell, not necessarily the next one in sequence.
   const [revealedCell, setRevealedCell] = useState(null); // { key, num: number|null } | null
   // 引路符 (v3.2): ordered array of up-to-3 upcoming cell keys, marks only.
   const [previewCells, setPreviewCells] = useState([]);
-  // Proactive stuck detection + root-cause tool (v3.1 §一之4).
+  // Stuck detection (v3.1 §一之4, retuned in v3.3): surfaced only via the
+  // idle timer below, or immediately when a tool that can't act on a dead
+  // end is invoked directly (see placeNextCell/previewPath).
   const [stuckBannerVisible, setStuckBannerVisible] = useState(false);
   const [rootCause, setRootCause] = useState(null); // { lastGoodStep, suggestedCell } | null
-  const stuckSinceRef = useRef(null);
-  const stuckShownRef = useRef(false);
   const timerRef = useRef(null);
   const puzzleRef = useRef(null);
-  // Idle-triggered auto-hint (v3.2) — idleHintTimerRef holds the pending
-  // setTimeout; hintRef always points at the latest `hint` closure so
-  // scheduleIdleHint can be declared once, early, without caring about
-  // hint()'s own declaration order below.
-  const idleHintTimerRef = useRef(null);
-  const hintRef = useRef(null);
-  // Whether any hint/tool (hint(), revealCell(), traceRootCause()) was
-  // used this run — feeds the "no-hint" scoring bonus (v3.1).
+  // Idle-triggered stuck check (v3.3) — stuckTimerRef holds the pending
+  // setTimeout, cleared/rescheduled on every player action.
+  const stuckTimerRef = useRef(null);
+  // Whether any tool (revealCell(), traceRootCause(), placeNextCell(),
+  // previewPath(), freezeTime()) was used this run — feeds the "no-hint"
+  // scoring bonus (v3.1). The passive stuck reminder never sets this: it
+  // doesn't reveal any solution info, just that the current path is dead.
   const usedToolRef = useRef(false);
 
   const tapsRef = useRef(0);
   const mistakesRef = useRef(0);
   const elapsedRef = useRef(0);
   const onWinRef = useRef(onWin);
-  const onHintUsedRef = useRef(onHintUsed);
   const onUndoUsedRef = useRef(onUndoUsed);
   useEffect(() => { onWinRef.current = onWin; }, [onWin]);
-  useEffect(() => { onHintUsedRef.current = onHintUsed; }, [onHintUsed]);
   useEffect(() => { onUndoUsedRef.current = onUndoUsed; }, [onUndoUsed]);
   useEffect(() => { tapsRef.current = taps; }, [taps]);
   useEffect(() => { mistakesRef.current = mistakes; }, [mistakes]);
@@ -200,33 +190,40 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
   const setPath = useCallback((next) => {
     pathRef.current = next;
     setFilledOrder(next);
-    setHintCell(null);
-    setHintStuck(false);
     setRevealedCell(null);
     setRootCause(null);
     setPreviewCells([]);
+    // Every path mutation (advance or retract) invalidates any stuck
+    // reminder shown for the *previous* position — it'll be re-evaluated
+    // fresh after the next pause via scheduleStuckCheck().
+    setStuckBannerVisible(false);
   }, []);
 
-  const clearIdleHintTimer = useCallback(() => {
-    if (idleHintTimerRef.current) {
-      clearTimeout(idleHintTimerRef.current);
-      idleHintTimerRef.current = null;
+  const clearStuckTimer = useCallback(() => {
+    if (stuckTimerRef.current) {
+      clearTimeout(stuckTimerRef.current);
+      stuckTimerRef.current = null;
     }
   }, []);
 
-  // Resets the idle-auto-hint clock — called from every player action
-  // (advanceTo/undo) and every other tool use, so the free auto-hint only
-  // fires after a real pause, not immediately after something just happened.
-  const scheduleIdleHint = useCallback(() => {
-    clearIdleHintTimer();
+  // Resets the idle-stuck-check clock — called from every player action
+  // (advanceTo/undo) and every tool use, so the reminder only evaluates
+  // after a real pause, not immediately after something just happened.
+  const scheduleStuckCheck = useCallback(() => {
+    clearStuckTimer();
     if (wonRef.current || !puzzleRef.current) return;
-    idleHintTimerRef.current = setTimeout(() => {
-      idleHintTimerRef.current = null;
-      if (!wonRef.current && hintRef.current) hintRef.current();
-    }, IDLE_AUTO_HINT_MS);
-  }, [clearIdleHintTimer]);
+    stuckTimerRef.current = setTimeout(() => {
+      stuckTimerRef.current = null;
+      const p = puzzleRef.current;
+      if (!p || wonRef.current) return;
+      const order = pathRef.current;
+      if (order.length === 0) return;
+      const completion = findCompletion(p, order);
+      if (completion === null) setStuckBannerVisible(true);
+    }, STUCK_REMINDER_IDLE_MS);
+  }, [clearStuckTimer]);
 
-  useEffect(() => clearIdleHintTimer, [clearIdleHintTimer]);
+  useEffect(() => clearStuckTimer, [clearStuckTimer]);
 
   const start = useCallback((newPuzzle) => {
     puzzleRef.current = newPuzzle;
@@ -235,21 +232,16 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     setFilledOrder([]);
     setTaps(0);
     setMistakes(0);
-    setHints(0);
     setElapsed(0);
-    setHintCell(null);
-    setHintStuck(false);
     setRevealedCell(null);
     setRootCause(null);
     setPreviewCells([]);
     setStuckBannerVisible(false);
-    stuckSinceRef.current = null;
-    stuckShownRef.current = false;
     wonRef.current = false;
     setWon(false);
     usedToolRef.current = false;
-    clearIdleHintTimer(); // not (re)started until the player's first tap
-  }, [clearIdleHintTimer]);
+    clearStuckTimer(); // not (re)started until the player's first tap
+  }, [clearStuckTimer]);
 
   // Resets progress on the *same* puzzle instance (no regeneration) — used
   // by "play again"/"retry" so a retry is actually a retry, not a new
@@ -273,45 +265,11 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     shakeTimeout.current = setTimeout(() => setShakeKey(null), 380);
   }, []);
 
-  // "玩家自己回退離開卡死點後，偵測重新啟動" — any retraction (drag-back or
-  // explicit undo) that backs out of the point where stuck-detection first
-  // triggered clears the episode so it can fire fresh later.
-  const maybeResetStuck = useCallback((newLength) => {
-    if (stuckSinceRef.current !== null && newLength < stuckSinceRef.current) {
-      stuckSinceRef.current = null;
-      stuckShownRef.current = false;
-      setStuckBannerVisible(false);
-    }
-  }, []);
-
-  // Background stuck-check (v3.1 §一之4a): run after every successful move,
-  // using a reduced step budget so it can't noticeably lag a 16x16 board.
-  // Doesn't interrupt immediately — waits 3 further moves past the first
-  // detected dead end before surfacing the banner, and only once per episode.
-  const checkStuck = useCallback((order) => {
-    const puzzle = puzzleRef.current;
-    const completion = findCompletion(puzzle, order, QUICK_CHECK_BUDGET);
-    if (completion === null) {
-      if (stuckSinceRef.current === null) {
-        stuckSinceRef.current = order.length;
-      } else if (!stuckShownRef.current && order.length - stuckSinceRef.current >= 3) {
-        stuckShownRef.current = true;
-        setStuckBannerVisible(true);
-      }
-    } else {
-      // Solvable, or the quick budget timed out ("unknown") — treat both as
-      // "not stuck" rather than risk a false positive from an under-budget search.
-      stuckSinceRef.current = null;
-      stuckShownRef.current = false;
-      setStuckBannerVisible(false);
-    }
-  }, []);
-
   const dismissStuckBanner = useCallback(() => setStuckBannerVisible(false), []);
 
   const handleWin = useCallback(() => {
     wonRef.current = true;
-    clearIdleHintTimer();
+    clearStuckTimer();
     setWon(true);
     onWinRef.current &&
       onWinRef.current({
@@ -320,7 +278,7 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
         timeSec: elapsedRef.current,
         usedTool: usedToolRef.current,
       });
-  }, [clearIdleHintTimer]);
+  }, [clearStuckTimer]);
 
   // Advance the path to (r,c) or retract; reads the synchronous pathRef so
   // rapid drag events never work off stale state.
@@ -328,7 +286,7 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     (r, c) => {
       const puzzle = puzzleRef.current;
       if (!puzzle || wonRef.current) return;
-      scheduleIdleHint(); // any interaction resets the idle-auto-hint clock
+      scheduleStuckCheck(); // any interaction resets the idle-stuck-check clock
       const order = pathRef.current;
       const key = `${r}_${c}`;
 
@@ -350,9 +308,7 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
       if (order.length >= 2) {
         const [pr, pc] = order[order.length - 2];
         if (pr === r && pc === c) {
-          const retracted = order.slice(0, -1);
-          setPath(retracted);
-          maybeResetStuck(retracted.length);
+          setPath(order.slice(0, -1));
           return;
         }
       }
@@ -371,68 +327,23 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
       const next = [...order, [r, c]];
       setPath(next);
       setTaps((t) => t + 1);
-      if (next.length === puzzle.total) {
-        handleWin();
-      } else {
-        checkStuck(next);
-      }
+      if (next.length === puzzle.total) handleWin();
     },
-    [setPath, triggerShake, handleWin, checkStuck, scheduleIdleHint]
+    [setPath, triggerShake, handleWin, scheduleStuckCheck]
   );
 
   const undo = useCallback(() => {
     if (wonRef.current) return;
     const order = pathRef.current;
     if (order.length === 0) return;
-    scheduleIdleHint();
-    const next = order.slice(0, -1);
-    setPath(next);
-    maybeResetStuck(next.length);
+    scheduleStuckCheck();
+    setPath(order.slice(0, -1));
     onUndoUsedRef.current && onUndoUsedRef.current();
-  }, [setPath, maybeResetStuck, scheduleIdleHint]);
-
-  // Marks (doesn't auto-place) the correct next cell so the player still
-  // makes the move themselves. First checks whether the player's actual
-  // current path can still be completed at all — following the original
-  // canonical solution blindly would occasionally point at a cell that's
-  // no longer reachable once the player has taken a different-but-valid
-  // route, which is worse than useless. If nothing can complete the
-  // position, says so instead of guessing.
-  //
-  // v3.2: no longer a manually-tapped button — this only ever fires now via
-  // scheduleIdleHint()'s timeout (free, automatic, ~IDLE_AUTO_HINT_MS after
-  // the player's last move). Kept as a plain function (not UI-bound) so the
-  // idle timer can call it through hintRef without an ordering dependency.
-  const hint = useCallback(() => {
-    const puzzle = puzzleRef.current;
-    if (!puzzle || wonRef.current) return;
-    const order = pathRef.current;
-    const nextNum = order.length + 1;
-    if (nextNum > puzzle.total) return;
-    usedToolRef.current = true;
-
-    const completion = completionFrom(puzzle, order);
-    if (completion === null || completion === "unknown") {
-      setHintCell(null);
-      setHintStuck(true);
-      onHintUsedRef.current && onHintUsedRef.current({ salvageable: false });
-      return;
-    }
-
-    const nextCell = completion[nextNum - 1];
-    setHintStuck(false);
-    setHintCell(`${nextCell[0]}_${nextCell[1]}`);
-    setHints((h) => h + 1);
-    onHintUsedRef.current && onHintUsedRef.current({ salvageable: true });
-  }, []);
-
-  useEffect(() => {
-    hintRef.current = hint;
-  }, [hint]);
+  }, [setPath, scheduleStuckCheck]);
 
   // Magnifier (v3.1 §一之3): reveal the correct number for *any* tapped
   // cell, not just the next one in sequence — doesn't auto-place it, same
-  // "player still makes the move" principle as hint().
+  // "player still makes the move" principle as the other tools.
   const revealCell = useCallback((r, c) => {
     const puzzle = puzzleRef.current;
     if (!puzzle || wonRef.current) return;
@@ -440,7 +351,7 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     if (puzzle.clueMap[key] !== undefined) return; // clue cells already show their number
     if (pathRef.current.some(([fr, fc]) => fr === r && fc === c)) return; // already filled in
     usedToolRef.current = true;
-    scheduleIdleHint();
+    scheduleStuckCheck();
 
     const order = pathRef.current;
     const completion = completionFrom(puzzle, order);
@@ -450,24 +361,26 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     }
     const idx = completion.findIndex(([pr, pc]) => pr === r && pc === c);
     setRevealedCell({ key, num: idx + 1 });
-  }, [scheduleIdleHint]);
+  }, [scheduleStuckCheck]);
 
   const traceRootCause = useCallback(() => {
     const puzzle = puzzleRef.current;
     const order = pathRef.current;
     if (!puzzle || wonRef.current || order.length < 2) return null;
     usedToolRef.current = true;
-    scheduleIdleHint();
+    scheduleStuckCheck();
     const result = traceRootCauseFrom(puzzle, order);
     setRootCause(result);
     return result;
-  }, [scheduleIdleHint]);
+  }, [scheduleStuckCheck]);
 
   // 接力筆 (v3.2): *auto-places* the next correct cell instead of just
   // marking it — the one paid tool that actually advances the path. Safe to
   // hand straight to advanceTo() since completionFrom guarantees the
   // returned cell is adjacent and clue-consistent by construction, so it
-  // reuses advanceTo's win-check/checkStuck/taps bookkeeping for free.
+  // reuses advanceTo's win-check bookkeeping for free. If the current path
+  // is already a dead end there's nothing to place, so it surfaces the
+  // stuck banner immediately instead of waiting for the idle timer.
   const placeNextCell = useCallback(() => {
     const puzzle = puzzleRef.current;
     if (!puzzle || wonRef.current) return false;
@@ -477,8 +390,7 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     usedToolRef.current = true;
     const completion = completionFrom(puzzle, order);
     if (completion === null || completion === "unknown") {
-      setHintCell(null);
-      setHintStuck(true);
+      setStuckBannerVisible(true);
       return false;
     }
     const [r, c] = completion[nextNum - 1];
@@ -487,25 +399,26 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
   }, [advanceTo]);
 
   // 引路符 (v3.2): preview (mark only, no digits) the next PREVIEW_LOOKAHEAD
-  // cells in sequence — a wider-but-shallower cousin of hint()/接力筆, shows
-  // the shape of the upcoming route without spoiling exact numbers.
+  // cells in sequence — a wider-but-shallower cousin of 接力筆, shows the
+  // shape of the upcoming route without spoiling exact numbers. Same
+  // immediate-stuck-banner fallback as placeNextCell when there's nothing
+  // left to preview.
   const previewPath = useCallback(() => {
     const puzzle = puzzleRef.current;
     if (!puzzle || wonRef.current) return [];
     const order = pathRef.current;
     usedToolRef.current = true;
-    scheduleIdleHint();
+    scheduleStuckCheck();
     const completion = completionFrom(puzzle, order);
     if (completion === null || completion === "unknown") {
-      setHintCell(null);
-      setHintStuck(true);
       setPreviewCells([]);
+      setStuckBannerVisible(true);
       return [];
     }
     const upcoming = completion.slice(order.length, order.length + PREVIEW_LOOKAHEAD).map(([r, c]) => `${r}_${c}`);
     setPreviewCells(upcoming);
     return upcoming;
-  }, [scheduleIdleHint]);
+  }, [scheduleStuckCheck]);
 
   // 靜心符 (v3.2): flat time-refund off the counted elapsed seconds — helps
   // reach the golden/silver time-bonus tier. An instant, visible refund
@@ -514,10 +427,10 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
   const freezeTime = useCallback(() => {
     if (!puzzleRef.current || wonRef.current) return false;
     usedToolRef.current = true;
-    scheduleIdleHint();
+    scheduleStuckCheck();
     setElapsed((e) => Math.max(0, e - FREEZE_REFUND_SEC));
     return true;
-  }, [scheduleIdleHint]);
+  }, [scheduleStuckCheck]);
 
   /* derived candidate cells (valid next taps) for gentle highlighting */
   const candidateSet = useMemo(() => {
@@ -545,12 +458,9 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     candidateSet,
     taps,
     mistakes,
-    hints,
     elapsed,
     won,
     shakeKey,
-    hintCell,
-    hintStuck,
     revealedCell,
     previewCells,
     stuckBannerVisible,
@@ -559,7 +469,6 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     restart,
     advanceTo,
     undo,
-    hint,
     revealCell,
     traceRootCause,
     placeNextCell,

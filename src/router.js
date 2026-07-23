@@ -1,6 +1,6 @@
 import { isValidDateStr, clampToToday, todayUTCString } from "./dateUtil.js";
 
-const ROUTES = new Set(["number-link", "history", "rules"]);
+const ROUTES = new Set(["number-link", "history", "rules", "calendar"]);
 const DAILY_ROUTE = /^daily(?:\/(\d{4}-\d{2}-\d{2}))?$/;
 // The captured number's meaning changed from a fixed level-array index to a
 // chapter board size (v3.1 restructure) — the route shape itself is
@@ -30,6 +30,9 @@ export function buildHashRoute(kind, level = null) {
   if (!kind) return "/";
   if (kind === "number-link") {
     return level != null ? `/number-link/${level}` : "/number-link";
+  }
+  if (kind === "daily") {
+    return level != null ? `/daily/${level}` : "/daily";
   }
   return `/${kind}`;
 }

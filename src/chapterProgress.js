@@ -2,7 +2,7 @@
 // numberlink_progress_v1 (unlockedLevel + best[levelIndex]) now that levels
 // are infinite/random within a chapter rather than a fixed indexed list.
 // Shape: { [size]: { chapterClearCount, bestScore } }
-import { CHAPTERS, CHAPTER_MILESTONE } from "./engine/chapters.mjs";
+import { CHAPTERS, CHAPTER_MILESTONE, SCORE_MILESTONE_INTERVAL } from "./engine/chapters.mjs";
 
 const KEY = "chapter_progress_v1";
 
@@ -41,7 +41,7 @@ export function isChapterUnlocked(size) {
 // needs to know about the milestone bonus) before the clear is persisted.
 export function willHitMilestoneOnNextClear(size) {
   const next = getChapterEntry(size).chapterClearCount + 1;
-  return next % CHAPTER_MILESTONE === 0;
+  return next % SCORE_MILESTONE_INTERVAL === 0;
 }
 
 // Records one clear in `size`'s chapter, bumping its clear count and best
@@ -51,7 +51,7 @@ export function recordChapterClear(size, score) {
   const progress = loadChapterProgress();
   const prev = progress[size] || { chapterClearCount: 0, bestScore: null };
   const chapterClearCount = prev.chapterClearCount + 1;
-  const justHitMilestone = chapterClearCount % CHAPTER_MILESTONE === 0;
+  const justHitMilestone = chapterClearCount % SCORE_MILESTONE_INTERVAL === 0;
   const bestScore = prev.bestScore == null ? score : Math.max(prev.bestScore, score);
   progress[size] = { chapterClearCount, bestScore };
   save(progress);

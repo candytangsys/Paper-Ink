@@ -1,5 +1,5 @@
 /**
- * Streak 系統：每月限救一次、只能救「昨天」、儲存介面注入式
+ * Streak 系統：救回次數不限、只能救「昨天」、儲存介面注入式
  */
 const DAY = 86400000;
 const iso = (t) => new Date(t).toISOString().slice(0, 10);
@@ -29,8 +29,6 @@ export function createStreakStore(storage) {
       const s = load();
       if (!s.lastDate) return { ok: false, reason: "no_history" };
       if (dayDiff(s.lastDate, todayStr) !== 2) return { ok: false, reason: "not_yesterday_break" };
-      const month = todayStr.slice(0, 7);
-      if (s.rescueUsedMonth === month) return { ok: false, reason: "monthly_limit" };
       return { ok: true };
     },
     rescue(todayStr) {
@@ -41,9 +39,14 @@ export function createStreakStore(storage) {
       s.lastDate = yesterday;
       s.history = s.history || {};
       s.history[yesterday] = { rescued: true };
-      s.rescueUsedMonth = todayStr.slice(0, 7);
       save(s);
       return { success: true, streak: s.streak };
+    },
+    // Raw per-date streak history (perfect/timeSec for real completions,
+    // rescued:true for a rescued gap day) — used by the calendar view to
+    // mark rescued days distinctly from actually-solved ones.
+    getHistory() {
+      return load().history || {};
     },
     status(todayStr) {
       const s = load();

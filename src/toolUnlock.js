@@ -25,12 +25,23 @@ export function unlockViaAd(confirmMessage) {
 // players toward spreading spend across tools or watching an ad
 // occasionally instead of point-buying one favorite tool indefinitely at a
 // flat price. Watching an ad is unaffected — always free, no scaling.
+//
+// The escalation resets every calendar month (UTC, matching the daily
+// challenge's date convention) — counts are stored alongside the month they
+// were accumulated in, and a stale month is treated as empty rather than
+// migrated forward.
 const PURCHASE_KEY = "tool_purchase_counts_v1";
 const COST_GROWTH_PER_PURCHASE = 0.2;
 
+function currentMonthKey() {
+  return new Date().toISOString().slice(0, 7);
+}
+
 function loadPurchaseCounts() {
   try {
-    return JSON.parse(localStorage.getItem(PURCHASE_KEY)) || {};
+    const state = JSON.parse(localStorage.getItem(PURCHASE_KEY));
+    if (!state || state.month !== currentMonthKey()) return {};
+    return state.counts || {};
   } catch {
     return {};
   }
@@ -38,7 +49,7 @@ function loadPurchaseCounts() {
 
 function savePurchaseCounts(counts) {
   try {
-    localStorage.setItem(PURCHASE_KEY, JSON.stringify(counts));
+    localStorage.setItem(PURCHASE_KEY, JSON.stringify({ month: currentMonthKey(), counts }));
   } catch {
     /* storage unavailable, ignore */
   }

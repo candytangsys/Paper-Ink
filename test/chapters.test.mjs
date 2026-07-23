@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHAPTERS, CHAPTER_MILESTONE, clueRatioForClear, nextChapterSize } from "../src/engine/chapters.mjs";
+import { CHAPTERS, CHAPTER_MILESTONE, SCORE_MILESTONE_INTERVAL, clueRatioForClear, nextChapterSize } from "../src/engine/chapters.mjs";
 import { getChapterEntry, isChapterUnlocked, recordChapterClear, willHitMilestoneOnNextClear, loadChapterProgress } from "../src/chapterProgress.js";
 
 function memoryStorage() {
@@ -45,7 +45,7 @@ test("second chapter locked until the first hits CHAPTER_MILESTONE clears", () =
 test("recordChapterClear reports justHitMilestone exactly on the crossing clear", () => {
   global.localStorage = memoryStorage();
   let last;
-  for (let i = 0; i < CHAPTER_MILESTONE; i++) last = recordChapterClear(CHAPTERS[0], 10);
+  for (let i = 0; i < SCORE_MILESTONE_INTERVAL; i++) last = recordChapterClear(CHAPTERS[0], 10);
   assert.equal(last.justHitMilestone, true);
   const after = recordChapterClear(CHAPTERS[0], 10);
   assert.equal(after.justHitMilestone, false);

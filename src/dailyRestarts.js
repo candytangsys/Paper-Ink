@@ -11,6 +11,12 @@ const KEY = "daily_restart_count_v1";
 
 export const DAILY_RESTART_LIMIT = 3;
 
+// Mistake count (per attempt) at which the Daily Challenge is considered
+// "failed" and Daily.jsx surfaces the challenge-failed banner (retry/undo,
+// or watch an ad to revive once DAILY_RESTART_LIMIT is exhausted). Doesn't
+// block further taps — the player can still ignore it and finish anyway.
+export const DAILY_FAIL_MISTAKES = 3;
+
 function loadRestartCounts() {
   try {
     return JSON.parse(localStorage.getItem(KEY)) || {};

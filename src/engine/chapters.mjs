@@ -20,7 +20,12 @@ export const CHAPTERS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16];
 
 // Clears within one chapter needed to unlock the next chapter (and to reach
 // the difficulty floor). Suggested default from the spec, adjustable.
-export const CHAPTER_MILESTONE = 10;
+export const CHAPTER_MILESTONE = 7;
+
+// Repeating interval for the scoring "milestone" bonus (+30, see
+// engine/score.mjs's computeScore) — independent of CHAPTER_MILESTONE, the
+// chapter-unlock threshold, so tuning one doesn't silently move the other.
+export const SCORE_MILESTONE_INTERVAL = 10;
 
 // Chapters whose puzzles must require at least one diagonal step, translated
 // from the old DIAGONAL_FORCED_LEVELS={2,3} (both size-3 levels).
