@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, RotateCcw, Timer, Feather, Share2 } from "lucide-react";
+import { ArrowLeft, Timer, Feather, Share2 } from "lucide-react";
 import { inkWashStyle } from "../theme.jsx";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "../components/LangToggle.jsx";
@@ -25,7 +25,6 @@ const TEXT = {
     chapterLabel: (size) => `${size} × ${size} 章節`,
     perfect: "完美",
     backToLevels: "返回主畫面",
-    regenerate: "重新出題",
     nextStroke: (n) => `下一筆　${n}`,
     solved: "一筆連成",
     steps: (n) => `${n} 步`,
@@ -51,7 +50,6 @@ const TEXT = {
     chapterLabel: (size) => `${size} × ${size} Chapter`,
     perfect: "Perfect",
     backToLevels: "Back to Home",
-    regenerate: "New puzzle",
     nextStroke: (n) => `Next stroke　${n}`,
     solved: "Solved in one stroke",
     steps: (n) => `${n} moves`,
@@ -218,10 +216,6 @@ export default function NumberLink({ onExit, initialSize = null }) {
     }
   }, [initialSize, loaded, startChapterLevel, onExit]);
 
-  const regenerate = useCallback(() => {
-    if (chapterSize != null) startChapterLevel(chapterSize);
-  }, [chapterSize, startChapterLevel]);
-
   const dismissIntro = useCallback(() => {
     markIntroSeen();
     setIntroDismissed(true);
@@ -248,7 +242,6 @@ export default function NumberLink({ onExit, initialSize = null }) {
         pointsBalance={pointsBalance}
         justUnlocked={justUnlocked}
         session={session}
-        onRegenerate={regenerate}
         onBack={onExit}
         onNextLevel={() => startChapterLevel(chapterSize)}
         onReplay={session.restart}
@@ -264,7 +257,7 @@ export default function NumberLink({ onExit, initialSize = null }) {
 
 function GameScreen({
   chapterSize, chapterClearCount, bestScore, lastScore, pointsBalance, justUnlocked,
-  session, onRegenerate, onBack, onNextLevel, onReplay, t, lang,
+  session, onBack, onNextLevel, onReplay, t, lang,
 }) {
   const { puzzle, taps, mistakes, elapsed, won } = session;
   const [toast, setToast] = useState(null);
@@ -306,9 +299,7 @@ function GameScreen({
           <div style={styles.gameLevelLabel}>{t.chapterLabel(chapterSize)} · {t.level(displayLevel)}</div>
           <div style={styles.gameNext}>{won ? t.solved : t.nextStroke(nextNum)}</div>
         </div>
-        <button onClick={onRegenerate} style={styles.iconBtn} aria-label={t.regenerate}>
-          <RotateCcw size={16} color="#5A564C" />
-        </button>
+        <div style={styles.iconBtnSpacer} />
       </div>
 
       <div style={styles.statsRow}>
@@ -423,6 +414,7 @@ const styles = {
     justifyContent: "center",
     cursor: "pointer",
   },
+  iconBtnSpacer: { width: 38, height: 38 },
   gameHeaderCenter: { textAlign: "center" },
   gameLevelLabel: {
     fontFamily: "'EB Garamond', serif",

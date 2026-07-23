@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Undo2, RotateCcw, Search, Crosshair, Wand2, Route, Snowflake, ZoomIn, ZoomOut, Coins } from "lucide-react";
+import { Undo2, RotateCcw, Search, Crosshair, Wand2, Route, Snowflake, Coins } from "lucide-react";
 import { useLanguage } from "../../i18n.jsx";
 import Board from "./Board.jsx";
 import ToolUnlockSheet from "./ToolUnlockSheet.jsx";
@@ -22,8 +22,6 @@ import { isDesktopViewport } from "../../deviceUtil.js";
    the session from useGameSession() plus two small flags.
 --------------------------------------------------------- */
 
-const ZOOM_STEPS = [1, 1.15, 1.3];
-
 const TOOL_ORDER = ["magnifier", "rootCause", "relay", "preview", "freeze"];
 const TOOL_ICONS = { magnifier: Search, rootCause: Crosshair, relay: Wand2, preview: Route, freeze: Snowflake };
 const TOOL_COSTS = { magnifier: MAGNIFIER_COST, rootCause: ROOT_CAUSE_COST, relay: RELAY_COST, preview: PREVIEW_COST, freeze: FREEZE_COST };
@@ -35,8 +33,6 @@ const TEXT = {
     retryRemaining: (n) => (n > 0 ? `今日還可重來 ${n} 次` : "今日重來次數已用完"),
     startHint: "點擊「1」開始畫線",
     pointsLabel: "積分",
-    zoomIn: "放大盤面",
-    zoomOut: "縮小盤面",
     hintStuck: "目前走法已經無法完成，試試回退或重來一次",
     stuckPrompt: "目前走法可能已經卡住了",
     useToolBtn: "使用道具",
@@ -60,8 +56,6 @@ const TEXT = {
     retryRemaining: (n) => (n > 0 ? `${n} retries left today` : "No retries left today"),
     startHint: "Tap “1” to start drawing",
     pointsLabel: "Points",
-    zoomIn: "Zoom in",
-    zoomOut: "Zoom out",
     hintStuck: "This path can't be completed anymore — try undo or retry",
     stuckPrompt: "This path may already be stuck",
     useToolBtn: "Use tool",
@@ -94,7 +88,6 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
   const [unlockTool, setUnlockTool] = useState(null); // one of TOOL_ORDER | null
   const [unlockError, setUnlockError] = useState(null);
   const [liveBalance, setLiveBalance] = useState(() => getPointsBalance());
-  const [zoomIdx, setZoomIdx] = useState(0);
 
   // Re-read the wallet balance fresh each time the picker opens rather than
   // trusting the useState initializer's one-time snapshot (points may have
@@ -156,7 +149,6 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
 
   if (!puzzle) return null;
 
-  const zoom = ZOOM_STEPS[zoomIdx];
   // Current points cost for each tool, escalated by how many times it's
   // already been points-bought (see toolUnlock.js's getToolCost) — always
   // computed fresh at render time, not cached, so a purchase's price bump
@@ -182,24 +174,6 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
               <Coins size={14} color="#B8925A" />
               <span>{liveBalance}</span>
             </div>
-            <button
-              onClick={() => setZoomIdx((i) => Math.min(ZOOM_STEPS.length - 1, i + 1))}
-              disabled={zoomIdx >= ZOOM_STEPS.length - 1}
-              style={styles.railBtn}
-              aria-label={t.zoomIn}
-              title={t.zoomIn}
-            >
-              <ZoomIn size={17} />
-            </button>
-            <button
-              onClick={() => setZoomIdx((i) => Math.max(0, i - 1))}
-              disabled={zoomIdx <= 0}
-              style={styles.railBtn}
-              aria-label={t.zoomOut}
-              title={t.zoomOut}
-            >
-              <ZoomOut size={17} />
-            </button>
           </div>
         )}
 
@@ -229,7 +203,6 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
             revealedCell={revealedCell}
             rootCauseCell={rootCause ? rootCause.suggestedCell : null}
             previewCells={showTools ? previewCells : undefined}
-            zoom={showTools ? zoom : 1}
             magnifierMode={showTools && magnifierMode}
             onMagnifierTap={(r, c) => {
               revealCell(r, c);
@@ -337,18 +310,6 @@ const styles = {
     fontFamily: "'EB Garamond', serif",
     color: "#8B6A32",
     fontWeight: 600,
-  },
-  railBtn: {
-    width: "100%",
-    aspectRatio: "1",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#EAE2CF",
-    border: "1px solid rgba(43,42,40,0.16)",
-    borderRadius: 8,
-    color: "#2B2A28",
-    cursor: "pointer",
   },
   boardColumn: {
     flex: "1 1 auto",
