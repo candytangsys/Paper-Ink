@@ -1,5 +1,5 @@
 import { useMemo, useEffect } from "react";
-import { Check, Lock, History } from "lucide-react";
+import { Check, Lock, History, Coins, BookOpen } from "lucide-react";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "./LangToggle.jsx";
 import { HOME_COLORS, HOME_FONT_SERIF, HOME_FONT_SANS, HOME_FONT_MONO } from "../homeTheme.js";
@@ -11,6 +11,7 @@ import { todayUTCString } from "../dateUtil.js";
 import { CHAPTERS, CHAPTER_MILESTONE } from "../engine/chapters.mjs";
 import { loadChapterProgress, isChapterUnlocked } from "../chapterProgress.js";
 import { track } from "../analytics.js";
+import { getPointsBalance } from "../pointsWallet.js";
 
 // F7: the engine's WEEK_SCHEDULE[].label carries a fixed Chinese flavor
 // string used only to seed puzzle generation — the UI keeps its own
@@ -31,8 +32,10 @@ const TEXT = {
     ctaDone: "查看今日成績",
     sectionLabel: "常規關卡",
     chapterSize: (size) => `${size} × ${size}`,
-    chapterProgress: (count) => `${Math.min(count, CHAPTER_MILESTONE)}/${CHAPTER_MILESTONE}`,
+    chapterProgress: (count) => `第 ${count + 1} 關`,
     historyLink: "個人歷史紀錄",
+    rulesLink: "玩法說明",
+    pointsLabel: "積分",
   },
   en: {
     brand: "Paper & Ink",
@@ -44,8 +47,10 @@ const TEXT = {
     ctaDone: "View Today's Result",
     sectionLabel: "Regular Levels",
     chapterSize: (size) => `${size} × ${size}`,
-    chapterProgress: (count) => `${Math.min(count, CHAPTER_MILESTONE)}/${CHAPTER_MILESTONE}`,
+    chapterProgress: (count) => `Level ${count + 1}`,
     historyLink: "History",
+    rulesLink: "How to Play",
+    pointsLabel: "Points",
   },
 };
 
@@ -84,6 +89,7 @@ export default function Home({ onSelect }) {
     };
   }, []);
   const weekdayName = WEEKDAY_NAMES[lang][daily.weekdayIdx];
+  const pointsBalance = useMemo(() => getPointsBalance(), []);
 
   const chapters = useMemo(() => {
     const progress = loadChapterProgress();
@@ -102,9 +108,15 @@ export default function Home({ onSelect }) {
           <div style={styles.sealDot}>筆</div>
           <span style={styles.brandName}>{t.brand}</span>
         </div>
-        <div style={styles.streakChip}>
-          <span style={styles.flame}>🔥</span>
-          <span style={styles.streakNum}>{daily.streak}</span>
+        <div style={styles.badgeRow}>
+          <div style={styles.pointsChip} title={t.pointsLabel} aria-label={t.pointsLabel}>
+            <Coins size={13} color={HOME_COLORS.seal} />
+            <span style={styles.streakNum}>{pointsBalance}</span>
+          </div>
+          <div style={styles.streakChip}>
+            <span style={styles.flame}>🔥</span>
+            <span style={styles.streakNum}>{daily.streak}</span>
+          </div>
         </div>
       </div>
 
@@ -182,10 +194,16 @@ export default function Home({ onSelect }) {
           })}
         </div>
 
-        <button onClick={() => onSelect("history")} style={styles.historyLink}>
-          <History size={14} />
-          <span>{t.historyLink}</span>
-        </button>
+        <div style={styles.linkRow}>
+          <button onClick={() => onSelect("history")} style={styles.historyLink}>
+            <History size={14} />
+            <span>{t.historyLink}</span>
+          </button>
+          <button onClick={() => onSelect("rules")} style={styles.historyLink}>
+            <BookOpen size={14} />
+            <span>{t.rulesLink}</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -228,7 +246,21 @@ const styles = {
     fontSize: 16,
     letterSpacing: "0.06em",
   },
+  badgeRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  },
   streakChip: {
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+    padding: "6px 11px",
+    background: "#fff8ec",
+    border: `1px solid ${HOME_COLORS.hairline}`,
+    borderRadius: 999,
+  },
+  pointsChip: {
     display: "flex",
     alignItems: "center",
     gap: 5,
@@ -364,13 +396,17 @@ const styles = {
   chapterNodeUnlocked: { background: "#fff8ec", color: HOME_COLORS.ink, borderColor: HOME_COLORS.hairline },
   chapterNodeMastered: { background: HOME_COLORS.bamboo, color: HOME_COLORS.paper, borderColor: HOME_COLORS.bamboo },
   chapterNodeLocked: { cursor: "not-allowed", opacity: 0.45 },
+  linkRow: {
+    display: "flex",
+    gap: 10,
+    marginTop: 22,
+  },
   historyLink: {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
-    width: "100%",
-    marginTop: 22,
+    flex: 1,
     padding: "12px 0",
     borderRadius: 10,
     background: "transparent",

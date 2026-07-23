@@ -3,6 +3,7 @@ import Home from "./components/Home.jsx";
 import NumberLink from "./games/NumberLink.jsx";
 import Daily from "./games/Daily.jsx";
 import HistoryPage from "./components/HistoryPage.jsx";
+import RulesPage from "./components/RulesPage.jsx";
 import InstallBanner from "./components/InstallBanner.jsx";
 import LoadingScreen from "./components/LoadingScreen.jsx";
 import { GlobalInkStyle } from "./theme.jsx";
@@ -67,6 +68,7 @@ export default function App() {
       )}
       {route.kind === "daily" && <Daily date={route.date} onExit={() => navigate(null)} />}
       {route.kind === "history" && <HistoryPage onExit={() => navigate(null)} />}
+      {route.kind === "rules" && <RulesPage onExit={() => navigate(null)} />}
       <InstallBanner />
       {bootPhase !== "ready" && <LoadingScreen exiting={bootPhase === "exiting"} />}
     </LanguageProvider>

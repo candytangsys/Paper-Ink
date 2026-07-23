@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Undo2, Lightbulb, RotateCcw, ArrowLeft, Timer, Feather } from "lucide-react";
+import { ArrowLeft, RotateCcw, Timer, Feather } from "lucide-react";
 import { inkWashStyle } from "../theme.jsx";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "../components/LangToggle.jsx";
-import Board from "./numberlink/Board.jsx";
+import PlayArea from "./numberlink/PlayArea.jsx";
+import OnboardingIntro from "./numberlink/OnboardingIntro.jsx";
 import { useGameSession } from "./numberlink/useGameSession.js";
 import ScoreBreakdown from "./numberlink/ScoreBreakdown.jsx";
 import { fmtTime } from "../engine/share.mjs";
@@ -12,9 +13,10 @@ import { CHAPTERS, CONTROLS_HIDDEN_SIZES, DIAGONAL_FORCED_SIZES, clueRatioForCle
 import { parTimeSec, computeScore } from "../engine/score.mjs";
 import { getChapterEntry, isChapterUnlocked, recordChapterClear, willHitMilestoneOnNextClear } from "../chapterProgress.js";
 import { recordLevelHistoryEntry } from "../levelHistory.js";
-import { getTutorialVariant } from "../tutorialVariant.js";
 import { track } from "../analytics.js";
 import { recordLevelCompletion } from "../pwaInstall.js";
+import { addPoints } from "../pointsWallet.js";
+import { hasSeenIntro, markIntroSeen } from "../tutorialIntro.js";
 
 const TEXT = {
   zh: {
@@ -25,16 +27,12 @@ const TEXT = {
     regenerate: "重新出題",
     nextStroke: (n) => `下一筆　${n}`,
     solved: "一筆連成",
-    undo: "回退",
-    hintBtn: "提示",
     steps: (n) => `${n} 步`,
     mistakes: (n) => `${n} 失誤`,
     mistakesLabel: (n) => (n === 0 ? "零失誤" : `${n} 次失誤`),
     bestScore: (score) => `本章節最佳 ${score} 分`,
-    hintStuck: "目前走法已經無法完成，試試回退或重來一次",
     playAgain: "再玩一次",
     nextLevel: "下一關",
-    backToMenu: "返回主畫面",
     loading: "研墨中…",
     unlocked: (size) => `🎉 解鎖新章節：${size} × ${size}`,
     scoreBase: "完成",
@@ -43,7 +41,7 @@ const TEXT = {
     scoreNoHint: "無提示",
     scoreMilestone: "里程碑",
     scoreTotal: "本關積分",
-    abHints: { 2: "斜角也能走", 5: "按住可一筆滑過", 7: "卡住了？試試回退或提示" },
+    scoreBalance: (gain, balance) => `本關 +${gain} 分，目前總分 ${balance}`,
   },
   en: {
     level: (n) => `Level ${n}`,
@@ -53,16 +51,12 @@ const TEXT = {
     regenerate: "New puzzle",
     nextStroke: (n) => `Next stroke　${n}`,
     solved: "Solved in one stroke",
-    undo: "Undo",
-    hintBtn: "Hint",
     steps: (n) => `${n} moves`,
     mistakes: (n) => `${n} mistakes`,
     mistakesLabel: (n) => (n === 0 ? "No mistakes" : `${n} mistakes`),
     bestScore: (score) => `Chapter best ${score} pts`,
-    hintStuck: "This path can't be completed anymore — try undo or retry",
     playAgain: "Play again",
     nextLevel: "Next level",
-    backToMenu: "Back to Home",
     loading: "Grinding ink…",
     unlocked: (size) => `🎉 New chapter unlocked: ${size} × ${size}`,
     scoreBase: "Complete",
@@ -71,7 +65,7 @@ const TEXT = {
     scoreNoHint: "No hint",
     scoreMilestone: "Milestone",
     scoreTotal: "Score",
-    abHints: { 2: "Diagonal moves work too", 5: "Press and hold to trace in one stroke", 7: "Stuck? Try undo or hint" },
+    scoreBalance: (gain, balance) => `+${gain} this level, ${balance} total`,
   },
 };
 
@@ -91,6 +85,11 @@ const TEXT = {
    CHAPTER_MILESTONE clears, which is also when the next
    chapter unlocks. "第幾關" is just a clear-count display,
    not a stable level identity.
+
+   v3.2: play surface (board + tools + undo/retry) is now the
+   shared PlayArea component, unified with Daily.jsx. The old
+   per-level A/B text-hint experiment is retired in favor of a
+   one-time OnboardingIntro walkthrough (src/tutorialIntro.js).
 --------------------------------------------------------- */
 
 function buildPuzzle(n, clues, { requireDiagonal = false } = {}) {
@@ -127,8 +126,9 @@ export default function NumberLink({ onExit, initialSize = null }) {
   const [chapterClearCount, setChapterClearCount] = useState(0);
   const [bestScore, setBestScore] = useState(null);
   const [lastScore, setLastScore] = useState(null);
+  const [pointsBalance, setPointsBalance] = useState(null);
   const [justUnlocked, setJustUnlocked] = useState(null);
-  const variant = getTutorialVariant();
+  const [showIntro, setShowIntro] = useState(() => !hasSeenIntro());
 
   // Metadata about the puzzle currently in play, needed at win time to
   // compute par time (par depends on the clue ratio actually used).
@@ -175,6 +175,7 @@ export default function NumberLink({ onExit, initialSize = null }) {
     recordLevelCompletion();
     setChapterClearCount(newCount);
     setLastScore(score);
+    setPointsBalance(addPoints(score.total));
     setBestScore((prev) => (prev == null ? score.total : Math.max(prev, score.total)));
     const next = confirmedMilestone ? nextChapterSize(size) : null;
     setJustUnlocked(next);
@@ -210,6 +211,11 @@ export default function NumberLink({ onExit, initialSize = null }) {
     if (chapterSize != null) startChapterLevel(chapterSize);
   }, [chapterSize, startChapterLevel]);
 
+  const dismissIntro = useCallback(() => {
+    markIntroSeen();
+    setShowIntro(false);
+  }, []);
+
   if (!loaded) {
     return (
       <div style={styles.rootLoading}>
@@ -227,15 +233,16 @@ export default function NumberLink({ onExit, initialSize = null }) {
         chapterClearCount={chapterClearCount}
         bestScore={bestScore}
         lastScore={lastScore}
+        pointsBalance={pointsBalance}
         justUnlocked={justUnlocked}
         session={session}
-        variant={variant}
         onRegenerate={regenerate}
         onBack={onExit}
         onNextLevel={() => startChapterLevel(chapterSize)}
         onReplay={session.restart}
         t={t}
       />
+      {showIntro && <OnboardingIntro onDismiss={dismissIntro} />}
     </div>
   );
 }
@@ -243,18 +250,14 @@ export default function NumberLink({ onExit, initialSize = null }) {
 /* ---------- screens ---------- */
 
 function GameScreen({
-  chapterSize, chapterClearCount, bestScore, lastScore, justUnlocked,
-  session, variant, onRegenerate, onBack, onNextLevel, onReplay, t,
+  chapterSize, chapterClearCount, bestScore, lastScore, pointsBalance, justUnlocked,
+  session, onRegenerate, onBack, onNextLevel, onReplay, t,
 }) {
-  const {
-    puzzle, filledOrder, filledSet, candidateSet, taps, mistakes, elapsed, won,
-    shakeKey, hintCell, hintStuck, advanceTo, undo, hint,
-  } = session;
+  const { puzzle, taps, mistakes, elapsed, won } = session;
   if (!puzzle) return null;
-  const nextNum = filledOrder.length + 1;
-  const showControls = !CONTROLS_HIDDEN_SIZES.has(chapterSize);
+  const nextNum = session.filledOrder.length + 1;
+  const showTools = !CONTROLS_HIDDEN_SIZES.has(chapterSize);
   const displayLevel = chapterClearCount + 1;
-  const abHint = variant === "B" ? t.abHints[displayLevel] : null;
 
   return (
     <div style={styles.gameWrap}>
@@ -277,32 +280,7 @@ function GameScreen({
         <StatPill label={t.mistakes(mistakes)} warn={mistakes > 0} />
       </div>
 
-      {abHint && <div style={styles.abHint}>{abHint}</div>}
-      {hintStuck && <div style={styles.hintStuckBanner}>{t.hintStuck}</div>}
-
-      <Board
-        puzzle={puzzle}
-        filledOrder={filledOrder}
-        filledSet={filledSet}
-        candidateSet={candidateSet}
-        won={won}
-        shakeKey={shakeKey}
-        hintCell={hintCell}
-        onCellClick={advanceTo}
-      />
-
-      {showControls && (
-        <div style={styles.controlsRow}>
-          <button onClick={undo} style={styles.controlBtn} disabled={filledOrder.length === 0 || won}>
-            <Undo2 size={16} />
-            <span>{t.undo}</span>
-          </button>
-          <button onClick={hint} style={styles.controlBtn} disabled={won}>
-            <Lightbulb size={16} />
-            <span>{t.hintBtn}</span>
-          </button>
-        </div>
-      )}
+      <PlayArea session={session} showTools={showTools} toolContext="tutorial" />
 
       {won && (
         <div style={styles.winOverlay}>
@@ -314,9 +292,11 @@ function GameScreen({
             </div>
             <ScoreBreakdown
               score={lastScore}
+              pointsBalance={pointsBalance}
               labels={{
                 base: t.scoreBase, time: t.scoreTime, accuracy: t.scoreAccuracy,
                 noHint: t.scoreNoHint, milestone: t.scoreMilestone, total: t.scoreTotal,
+                balance: t.scoreBalance,
               }}
             />
             {bestScore != null && <div style={styles.winBest}>{t.bestScore(bestScore)}</div>}
@@ -374,7 +354,7 @@ const styles = {
     position: "relative",
     zIndex: 1,
     width: "100%",
-    maxWidth: 480,
+    maxWidth: 560,
     padding: "24px 16px 36px",
     display: "flex",
     flexDirection: "column",
@@ -431,46 +411,6 @@ const styles = {
     fontFamily: "'EB Garamond', serif",
     letterSpacing: 1,
     color: "#5A564C",
-  },
-  hintStuckBanner: {
-    marginTop: -10,
-    marginBottom: 16,
-    padding: "8px 14px",
-    borderRadius: 4,
-    background: "rgba(178,58,46,0.08)",
-    border: "1px solid rgba(178,58,46,0.3)",
-    fontSize: 12.5,
-    color: "#B23A2E",
-    fontFamily: "'Noto Serif TC', serif",
-    letterSpacing: 1,
-    textAlign: "center",
-  },
-  abHint: {
-    marginTop: -10,
-    marginBottom: 16,
-    fontSize: 12.5,
-    color: "#B8925A",
-    fontFamily: "'Noto Serif TC', serif",
-    letterSpacing: 1,
-    textAlign: "center",
-  },
-  controlsRow: {
-    display: "flex",
-    gap: 12,
-  },
-  controlBtn: {
-    display: "flex",
-    alignItems: "center",
-    gap: 7,
-    background: "#EAE2CF",
-    border: "1px solid rgba(43,42,40,0.16)",
-    borderRadius: 4,
-    padding: "11px 22px",
-    color: "#2B2A28",
-    fontSize: 14,
-    fontFamily: "'Noto Serif TC', serif",
-    letterSpacing: 2,
-    cursor: "pointer",
   },
   winOverlay: {
     position: "fixed",

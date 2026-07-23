@@ -8,17 +8,21 @@ import { inkTrailColor } from "../../theme.jsx";
    board) while staying inside a ~480px-wide column.
 --------------------------------------------------------- */
 
-export function boardMetrics(n) {
+// `zoom` (v3.2 left-rail zoom control) scales the base metrics directly
+// rather than a CSS transform, so the scrollable wrapper's dimensions and
+// cellAtLocal's hit-testing math both stay correct automatically instead of
+// needing a separate un-scale step.
+export function boardMetrics(n, zoom = 1) {
   // n=16 (the Sunday board) is the one size that can't fit a ≥32px touch
   // target inside a 375px-wide screen (16 * 32 = 512px alone exceeds that),
   // so it intentionally grows past the viewport and relies on the
   // scrollable wrapper + drag auto-scroll in Board to stay reachable.
   const cellSize =
-    n <= 4 ? 62 : n <= 6 ? 50 : n <= 7 ? 42 : n <= 8 ? 38 : n <= 9 ? 34 :
-    n <= 10 ? 30 : n <= 12 ? 25 : n <= 14 ? 21 : 32;
-  const gap = n <= 8 ? 5 : n <= 12 ? 3 : n <= 14 ? 2 : 3;
-  const pad = n <= 8 ? 12 : n <= 12 ? 9 : n <= 14 ? 7 : 10;
-  const fontSize = n <= 6 ? 18 : n <= 8 ? 15 : n <= 10 ? 13 : n <= 12 ? 11 : n <= 14 ? 9.5 : 14;
+    (n <= 4 ? 62 : n <= 6 ? 50 : n <= 7 ? 42 : n <= 8 ? 38 : n <= 9 ? 34 :
+    n <= 10 ? 30 : n <= 12 ? 25 : n <= 14 ? 21 : 32) * zoom;
+  const gap = (n <= 8 ? 5 : n <= 12 ? 3 : n <= 14 ? 2 : 3) * zoom;
+  const pad = (n <= 8 ? 12 : n <= 12 ? 9 : n <= 14 ? 7 : 10) * zoom;
+  const fontSize = (n <= 6 ? 18 : n <= 8 ? 15 : n <= 10 ? 13 : n <= 12 ? 11 : n <= 14 ? 9.5 : 14) * zoom;
   const boardPx = pad * 2 + n * cellSize + (n - 1) * gap;
   return { cellSize, gap, pad, fontSize, boardPx };
 }
@@ -34,11 +38,13 @@ export default function Board({
   onCellClick,
   revealedCell,
   rootCauseCell,
+  previewCells,
+  zoom = 1,
   magnifierMode,
   onMagnifierTap,
 }) {
   const n = puzzle.n;
-  const { cellSize, gap: GAP, pad: PAD, fontSize, boardPx } = boardMetrics(n);
+  const { cellSize, gap: GAP, pad: PAD, fontSize, boardPx } = boardMetrics(n, zoom);
 
   const numberAt = (r, c) => {
     const key = `${r}_${c}`;
@@ -250,6 +256,8 @@ export default function Board({
           const isHintTarget = hintCell === key && !isFilled;
           const isRevealed = !isFilled && !isClueOnly && revealedCell && revealedCell.key === key;
           const isRootCause = !isFilled && rootCauseCell === key;
+          const previewIndex = !isFilled && !isClueOnly && previewCells ? previewCells.indexOf(key) : -1;
+          const isPreview = previewIndex !== -1;
           const isHead =
             isFilled && filledOrder.length > 0 &&
             filledOrder[filledOrder.length - 1][0] === r &&
@@ -292,6 +300,14 @@ export default function Board({
             color = "#8B6A32";
             fontWeight = 700;
             boxShadow = "0 0 0 4px rgba(184,146,90,0.22)";
+          } else if (isPreview) {
+            // 引路符 — up to 3 upcoming cells, fading with distance so it
+            // reads as a route shape, not an exact-number spoiler like 放大鏡.
+            const strength = 1 - previewIndex * 0.3;
+            bg = `rgba(139,92,157,${(0.16 * strength).toFixed(3)})`;
+            border = `1.5px dashed rgba(139,92,157,${(0.7 * strength).toFixed(3)})`;
+            color = "#5A3C66";
+            fontWeight = 600;
           } else if (isClueOnly) {
             bg = "#E7DBBF";
             border = "1.5px solid rgba(43,42,40,0.5)";
@@ -311,7 +327,7 @@ export default function Board({
               onClick={(e) => {
                 if (e.detail === 0) (magnifierMode ? onMagnifierTap && onMagnifierTap(r, c) : onCellClick(r, c));
               }}
-              className={isShaking ? "ink-shake" : isHintTarget || isCandidate || isRootCause ? "ink-pulse" : ""}
+              className={isShaking ? "ink-shake" : isHintTarget || isCandidate || isRootCause || isPreview ? "ink-pulse" : ""}
               style={{
                 ...styles.cell,
                 width: cellSize,

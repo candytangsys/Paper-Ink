@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Undo2, Lightbulb, RotateCcw, Timer, Feather, Home, Share2, Flame } from "lucide-react";
+import { Timer, Feather, Home, Share2, Flame } from "lucide-react";
 import { COLORS, inkWashStyle, homeBtnStyle, brandRowStyle, eyebrowStyle } from "../theme.jsx";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "../components/LangToggle.jsx";
-import Board from "./numberlink/Board.jsx";
+import PlayArea from "./numberlink/PlayArea.jsx";
 import { useGameSession } from "./numberlink/useGameSession.js";
 import { buildDailyPuzzle } from "../engine/daily.mjs";
 import { fmtTime, buildDailyAnalyticsParams } from "../engine/share.mjs";
@@ -16,6 +16,7 @@ import { track } from "../analytics.js";
 import { recordLevelCompletion } from "../pwaInstall.js";
 import { parTimeSec, computeScore } from "../engine/score.mjs";
 import ScoreBreakdown from "./numberlink/ScoreBreakdown.jsx";
+import { addPoints } from "../pointsWallet.js";
 
 const TEXT = {
   zh: {
@@ -26,10 +27,6 @@ const TEXT = {
     reviewBanner: "僅供回顧・不列入連續紀錄",
     nextStroke: (n) => `下一筆　${n}`,
     solved: "一筆連成",
-    undo: "回退",
-    hintBtn: "提示",
-    retry: "重來",
-    hintStuck: "目前走法已經無法完成，試試回退或重來一次",
     steps: (n) => `${n} 步`,
     mistakes: (n) => `${n} 失誤`,
     mistakesLabel: (n) => (n === 0 ? "零失誤" : `${n} 次失誤`),
@@ -51,6 +48,7 @@ const TEXT = {
     scoreNoHint: "無提示",
     scoreMilestone: "里程碑",
     scoreTotal: "積分",
+    scoreBalance: (gain, balance) => `本關 +${gain} 分，目前總分 ${balance}`,
   },
   en: {
     home: "Home",
@@ -60,10 +58,6 @@ const TEXT = {
     reviewBanner: "Archive only · doesn't count toward your streak",
     nextStroke: (n) => `Next stroke　${n}`,
     solved: "Solved in one stroke",
-    undo: "Undo",
-    hintBtn: "Hint",
-    retry: "Retry",
-    hintStuck: "This path can't be completed anymore — try undo or retry",
     steps: (n) => `${n} moves`,
     mistakes: (n) => `${n} mistakes`,
     mistakesLabel: (n) => (n === 0 ? "No mistakes" : `${n} mistakes`),
@@ -85,6 +79,7 @@ const TEXT = {
     scoreNoHint: "No hint",
     scoreMilestone: "Milestone",
     scoreTotal: "Score",
+    scoreBalance: (gain, balance) => `+${gain} this level, ${balance} total`,
   },
 };
 
@@ -109,6 +104,7 @@ export default function Daily({ date, onExit }) {
   const [toast, setToast] = useState(null);
   const [rescuing, setRescuing] = useState(false);
   const [lastScore, setLastScore] = useState(null);
+  const [pointsBalance, setPointsBalance] = useState(null);
   const toastTimeout = useRef(null);
 
   const puzzle = useMemo(() => {
@@ -136,6 +132,7 @@ export default function Daily({ date, onExit }) {
       recordDailyCompletion(date, entry);
       setJustCompleted({ date, entry });
       setLastScore(score);
+      setPointsBalance(addPoints(score.total));
 
       let status = streakStatus;
       if (isToday) {
@@ -208,8 +205,10 @@ export default function Daily({ date, onExit }) {
     };
   }, []);
 
-  // Desktop keyboard shortcuts: Esc always goes home; the others only act
-  // while a puzzle is in progress (not on the recap card).
+  // Desktop keyboard shortcuts: Esc always goes home; Backspace/R only act
+  // while a puzzle is in progress (not on the recap card). Ctrl+Z/Cmd+Z is
+  // handled centrally by PlayArea (回退 lives there now); H/hint is gone —
+  // hint is no longer manually triggerable (v3.2, auto-fires on idle).
   useEffect(() => {
     const onKeyDown = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -236,16 +235,11 @@ export default function Daily({ date, onExit }) {
           e.preventDefault();
           session.restart();
         }
-      } else if (e.key === "h" || e.key === "H" || e.key === "?") {
-        if (!session.won) {
-          e.preventDefault();
-          session.hint();
-        }
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onExit, historyEntry, session.puzzle, session.filledOrder.length, session.won, session.undo, session.restart, session.hint]);
+  }, [onExit, historyEntry, session.puzzle, session.filledOrder.length, session.won, session.undo, session.restart]);
 
   const handleShare = useCallback(async () => {
     const entry = historyEntry;
@@ -322,6 +316,7 @@ export default function Daily({ date, onExit }) {
           <RecapCard
             entry={historyEntry}
             fullScore={justCompleted && justCompleted.date === date ? lastScore : null}
+            pointsBalance={justCompleted && justCompleted.date === date ? pointsBalance : null}
             isToday={isToday}
             streakStatus={streakStatus}
             onShare={handleShare}
@@ -339,12 +334,9 @@ export default function Daily({ date, onExit }) {
 }
 
 function GameArea({ session, t }) {
-  const {
-    puzzle, filledOrder, filledSet, candidateSet, taps, mistakes, elapsed, won,
-    shakeKey, hintCell, hintStuck, restart, advanceTo, undo, hint,
-  } = session;
+  const { puzzle, taps, mistakes, elapsed, won } = session;
   if (!puzzle) return null;
-  const nextNum = filledOrder.length + 1;
+  const nextNum = session.filledOrder.length + 1;
 
   return (
     <>
@@ -355,38 +347,12 @@ function GameArea({ session, t }) {
         <StatPill label={t.mistakes(mistakes)} warn={mistakes > 0} />
       </div>
 
-      {hintStuck && <div style={styles.hintStuckBanner}>{t.hintStuck}</div>}
-
-      <Board
-        puzzle={puzzle}
-        filledOrder={filledOrder}
-        filledSet={filledSet}
-        candidateSet={candidateSet}
-        won={won}
-        shakeKey={shakeKey}
-        hintCell={hintCell}
-        onCellClick={advanceTo}
-      />
-
-      <div style={styles.controlsRow}>
-        <button onClick={undo} style={styles.controlBtn} disabled={filledOrder.length === 0 || won} title={`${t.undo} (Backspace)`}>
-          <Undo2 size={16} />
-          <span>{t.undo}</span>
-        </button>
-        <button onClick={hint} style={styles.controlBtn} disabled={won} title={`${t.hintBtn} (H)`}>
-          <Lightbulb size={16} />
-          <span>{t.hintBtn}</span>
-        </button>
-        <button onClick={restart} style={styles.controlBtn} disabled={filledOrder.length === 0 || won} title={`${t.retry} (R)`}>
-          <RotateCcw size={16} />
-          <span>{t.retry}</span>
-        </button>
-      </div>
+      <PlayArea session={session} showTools toolContext="daily" />
     </>
   );
 }
 
-function RecapCard({ entry, fullScore, isToday, streakStatus, onShare, t }) {
+function RecapCard({ entry, fullScore, pointsBalance, isToday, streakStatus, onShare, t }) {
   return (
     <div style={styles.recapCard}>
       <Feather size={26} color="#B23A2E" />
@@ -398,9 +364,11 @@ function RecapCard({ entry, fullScore, isToday, streakStatus, onShare, t }) {
       {fullScore && (
         <ScoreBreakdown
           score={fullScore}
+          pointsBalance={pointsBalance}
           labels={{
             base: t.scoreBase, time: t.scoreTime, accuracy: t.scoreAccuracy,
             noHint: t.scoreNoHint, milestone: t.scoreMilestone, total: t.scoreTotal,
+            balance: t.scoreBalance,
           }}
         />
       )}
@@ -454,7 +422,7 @@ const styles = {
     position: "relative",
     zIndex: 1,
     width: "100%",
-    maxWidth: 480,
+    maxWidth: 560,
     padding: "56px 16px 40px",
     display: "flex",
     flexDirection: "column",
@@ -514,19 +482,6 @@ const styles = {
     gap: 10,
     marginBottom: 20,
   },
-  hintStuckBanner: {
-    marginTop: -10,
-    marginBottom: 16,
-    padding: "8px 14px",
-    borderRadius: 4,
-    background: "rgba(178,58,46,0.08)",
-    border: "1px solid rgba(178,58,46,0.3)",
-    fontSize: 12.5,
-    color: "#B23A2E",
-    fontFamily: "'Noto Serif TC', serif",
-    letterSpacing: 1,
-    textAlign: "center",
-  },
   statPill: {
     display: "flex",
     alignItems: "center",
@@ -539,26 +494,6 @@ const styles = {
     fontFamily: "'EB Garamond', serif",
     letterSpacing: 1,
     color: "#5A564C",
-  },
-  controlsRow: {
-    display: "flex",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 12,
-  },
-  controlBtn: {
-    display: "flex",
-    alignItems: "center",
-    gap: 7,
-    background: "#EAE2CF",
-    border: "1px solid rgba(43,42,40,0.16)",
-    borderRadius: 4,
-    padding: "11px 22px",
-    color: "#2B2A28",
-    fontSize: 14,
-    fontFamily: "'Noto Serif TC', serif",
-    letterSpacing: 2,
-    cursor: "pointer",
   },
   recapCard: {
     background: "#EAE2CF",

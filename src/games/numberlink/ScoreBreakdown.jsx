@@ -3,7 +3,12 @@
 // screens since both need identical rendering of the same score shape;
 // callers pass their own (already-translated) labels since this codebase
 // keeps TEXT dictionaries per-screen rather than centralized.
-export default function ScoreBreakdown({ score, labels }) {
+//
+// `pointsBalance` + `labels.balance` are optional: when provided (the score
+// this run earned has just been credited via addPoints, v3.1 §一), renders
+// a second line with the running wallet total so the credit is visible at
+// the moment it happens, not just later on Home.
+export default function ScoreBreakdown({ score, labels, pointsBalance }) {
   if (!score) return null;
   const { total, breakdown } = score;
   const parts = [
@@ -18,6 +23,9 @@ export default function ScoreBreakdown({ score, labels }) {
     <div style={styles.wrap}>
       <div style={styles.total}>{labels.total} {total}</div>
       <div style={styles.parts}>{parts.join(" · ")}</div>
+      {pointsBalance != null && labels.balance && (
+        <div style={styles.balanceLine}>{labels.balance(total, pointsBalance)}</div>
+      )}
     </div>
   );
 }
@@ -40,6 +48,13 @@ const styles = {
   parts: {
     fontSize: 11.5,
     color: "#8B8478",
+    fontFamily: "'EB Garamond', serif",
+    letterSpacing: 0.5,
+  },
+  balanceLine: {
+    marginTop: 2,
+    fontSize: 11.5,
+    color: "#B8925A",
     fontFamily: "'EB Garamond', serif",
     letterSpacing: 0.5,
   },

@@ -1,5 +1,56 @@
 # CHANGELOG
 
+## v1.12 — Unified play layout, 5-tool economy, passive hint, onboarding, Rules page
+
+Playtesting feedback on v1.11's tool buttons: Daily and regular levels had diverged layouts, the tool roster needed to grow past 2, 提示 (hint) as a manual free button was redundant now that a real economy exists, and new players had zero onboarding into any of this.
+
+### Added
+
+- **`src/games/numberlink/PlayArea.jsx`** — new shared play surface (left rail: points + zoom in/out; board column: start-hint line + stuck banners + `Board`; right rail: 5 paid tools; bottom row: 回退/重來 only), replacing both `NumberLink.jsx` and `Daily.jsx`'s separate, drifting control rows. Daily was the layout baseline per direction. Also centralizes the Ctrl+Z/Cmd+Z desktop shortcut (previously duplicated per screen).
+- **3 new paid tools** in `useGameSession.js`, alongside 放大鏡/溯源符 (5 total, all in `toolUnlock.js`'s cost table): **接力筆** (`placeNextCell`, 20 pts) auto-places the next correct cell — the first tool that actually advances the path, not just marks it, implemented by handing a `completionFrom`-derived cell straight to the existing `advanceTo`; **引路符** (`previewPath`, 15 pts) marks (no digits) the next 3 upcoming cells with fading opacity; **靜心符** (`freezeTime`, 10 pts) instantly refunds 15s off the counted elapsed time. `Board.jsx` gained a `previewCells` highlight branch (a 4th, visually distinct tint) and a `zoom` prop that scales `boardMetrics()`'s output directly (not a CSS transform), so hit-testing stays correct automatically at any zoom level.
+- **提示 is no longer a button.** It now auto-fires for free ~6s after the player's last move (`useGameSession.js`'s new `scheduleIdleHint`/`IDLE_AUTO_HINT_MS`, reset on every `advanceTo`/`undo`/other-tool-use), independent of the existing dead-end `stuckBannerVisible` detector — tying it to that detector specifically was considered and rejected: a confirmed dead end has no valid "next cell" to mark, so the auto-hint would rarely do anything useful there. An idle timer helps far more often (a player just thinking, not necessarily stuck).
+- **Regular-level onboarding**: `src/tutorialIntro.js` (one-time seen-flag) + `src/games/numberlink/OnboardingIntro.jsx`, a first-run modal covering the core rule, controls, the new auto-hint behavior, the tool rail, and a link to the new Rules page. Retires `tutorialVariant.js`'s old level-2/5/7 one-line text hints from the UI (the module and its independent `analytics.js` tagging on every `track()` call are untouched — nothing else depended on the visible hint feature). A stateless "點擊「1」開始畫線" line now shows above every fresh board (not just the first ever), replacing that slot.
+- **`src/components/RulesPage.jsx`** — new Home-linked page (`#/rules`) documenting goal/controls, chapter structure, the full scoring breakdown, all 5 tools + costs, and the Daily Challenge in one place; the onboarding modal links here instead of duplicating the content.
+- **Home's chapter grid** (`Home.jsx`) now shows "第 N 關" (`chapterClearCount + 1`, uncapped) under each unlocked chapter instead of a "3/10" fraction that stopped being meaningful once a chapter's infinite small levels pushed the real count past its old milestone cap.
+
+### Changed
+
+- `Board.jsx`'s `boardMetrics(n)` → `boardMetrics(n, zoom = 1)`.
+- `Home.jsx` / `RulesPage.jsx` gained a second link button (existing 個人歷史紀錄 + new 玩法說明) in a shared row.
+
+### Verification
+
+- `npm test` — 57/57 passing (no existing engine logic changed shape; the 3 new tools are thin wrappers around already-tested `completionFrom`/`advanceTo`).
+- `npm run build` — succeeds.
+- Not driven in a live browser this session (extension left uninstalled, same as v1.11) — recommend manually checking: onboarding modal appears once on a fresh install, then never again; the "tap 1" line appears on every new puzzle; idle ~6s mid-puzzle auto-marks a hint with no button pressed; all 5 tool buttons and the left-rail zoom/points work identically between a regular-level chapter and the Daily Challenge; 接力筆 is disabled exactly when the stuck banner is showing; Home's chapter grid keeps counting past "10" once a chapter is mastered; `#/rules` opens from Home in both languages.
+
+---
+
+## v1.11 — Points economy actually wired up; 放大鏡/溯源符 tools reach the UI
+
+The v3.1 scoring engine (`computeScore()`), the points wallet (`pointsWallet.js`), the unlock economy (`toolUnlock.js`), and the tool logic itself (`useGameSession.js`'s `revealCell`/`traceRootCause`/`stuckBannerVisible`) all already existed and were fully unit-tested — but nothing in the actual game screens called any of it. Every win computed a score that was shown once on the win card and then discarded; `addPoints` had zero call sites anywhere in the app, so the wallet could only ever read 0. This pass closes that gap first, then builds the UI the rest of the pending work depended on.
+
+### Fixed
+
+- **Points were never actually earned.** `NumberLink.jsx`'s and `Daily.jsx`'s `handleWin` now call `addPoints(score.total)` right after `computeScore()`, the same place `recordChapterClear`/`recordDailyCompletion` already persist the run. This was the actual blocker for everything else in this pass — the tool-unlock buttons below would have had nothing to spend without it.
+
+### Added
+
+- **Stuck-detection banner is now interactive.** `useGameSession`'s existing `stuckBannerVisible`/`dismissStuckBanner` were computed but never rendered. Both game screens now show a banner with three actions when the background stuck-check fires: "使用道具" (opens the 溯源符 unlock picker below), "回退" (the existing `undo()`), "忽略" (`dismissStuckBanner()`).
+- **放大鏡 (Magnifier) and 溯源符 (Root Cause) toolbar buttons**, in both `NumberLink.jsx` and `Daily.jsx`'s control row. Tapping either opens a new shared picker, `src/games/numberlink/ToolUnlockSheet.jsx` — "看廣告解鎖" (`unlockViaAd`, the existing `window.confirm` P0 stand-in) or "花費 N 積分解鎖" (`unlockViaPoints`, disabled and shows "積分不足" when the wallet can't cover it). On success: magnifier arms `magnifierMode` on `Board` (tapping any cell calls `revealCell(r,c)` and disarms itself — `Board.jsx` already supported this end-to-end, it just had no caller); root cause calls `traceRootCause()`, whose `suggestedCell` was already wired into `Board.jsx`'s highlight (`rootCauseCell` prop) but likewise had no caller. 溯源符 requires at least 2 placed cells (matches `traceRootCauseFrom`'s precondition) and is disabled until then; the magnifier button toggles the mode off again on a second tap instead of re-charging.
+- **Points balance now visible.** `Home.jsx` shows a `Coins`-icon chip reading `getPointsBalance()` next to the existing streak chip. `ScoreBreakdown.jsx` (shared by both win screens) gained an optional `pointsBalance` prop rendering a second line, "本關 +X 分，目前總分 Y" — only shown for a freshly-completed run in this session, not when redisplaying a past result from history.
+- **Ctrl+Z / Cmd+Z undo**, desktop-only (`src/deviceUtil.js`'s new `isDesktopViewport()`, ≥769px). `NumberLink.jsx` had no keyboard handling at all before this; `Daily.jsx` already handled Backspace/R/H/Esc and gained the new shortcut alongside them.
+- **Cursor styles reviewed**: `Board.jsx`'s magnifier-mode `crosshair` cursor was already correct; audited every other interactive control across `Home.jsx`, `NumberLink.jsx`, `Daily.jsx`, `Board.jsx`, and `HistoryPage.jsx` and confirmed all clickable buttons already carry an explicit `cursor: "pointer"` (none were relying on browser default). The new stuck-banner and tool-unlock buttons follow the same convention.
+
+### Verification
+
+- `npm test` — 57/57 passing (unaffected — this pass is UI wiring on top of already-tested engine code, no engine logic changed).
+- `npm run build` — succeeds.
+- Manual read-through of both game screens' new state (`magnifierMode`, `unlockTool`, `liveBalance`) confirms hook ordering stays valid (all new `useState`/`useCallback`/`useEffect` calls sit before each screen's existing `if (!puzzle) return null` early-return) and that the picker's `liveBalance` re-syncs from storage on open rather than trusting a stale mount-time snapshot.
+- Browser automation wasn't available in this environment this session (extension left uninstalled) — this pass hasn't been driven end-to-end in a live browser; recommend a manual pass (complete a level → confirm points chip updates on Home; trigger the stuck banner on a dead-end path → confirm all three actions; spend points down to 0 → confirm the picker disables "spend points" and shows "積分不足") before shipping.
+
+---
+
 ## v1.10 — Seal-mark character decided: 紙 → 筆
 
 Closes the one open item v1.7 left pending.

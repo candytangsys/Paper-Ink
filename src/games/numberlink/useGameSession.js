@@ -25,6 +25,19 @@ const DIRS_8 = [
 // stuck" — false negatives are fine here, a laggy board on every tap isn't.
 const QUICK_CHECK_BUDGET = 20000;
 
+// v3.2: 提示 is no longer a manual button — it auto-fires this long after
+// the player's last action, for free, so a genuinely-thinking player gets
+// nudged without having to ask. Reset on every move (advanceTo/undo) and
+// every other tool use; not started until the first tap (so it never
+// fires on the "tap 1 to start" empty board).
+const IDLE_AUTO_HINT_MS = 6000;
+
+// 靜心符 (v3.2): flat refund off the counted elapsed time.
+const FREEZE_REFUND_SEC = 15;
+
+// 引路符 (v3.2): how many upcoming cells to preview at once.
+const PREVIEW_LOOKAHEAD = 3;
+
 // Given the player's current (possibly off-solution) path, searches for
 // *any* legal way to fill the rest of the board — not just the original
 // canonical `puzzle.path` — so hint stays correct even after the player
@@ -146,6 +159,8 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
   // Magnifier (放大鏡, v3.1 §一之3): revealed number for an arbitrary
   // tapped cell, not necessarily the next one in sequence.
   const [revealedCell, setRevealedCell] = useState(null); // { key, num: number|null } | null
+  // 引路符 (v3.2): ordered array of up-to-3 upcoming cell keys, marks only.
+  const [previewCells, setPreviewCells] = useState([]);
   // Proactive stuck detection + root-cause tool (v3.1 §一之4).
   const [stuckBannerVisible, setStuckBannerVisible] = useState(false);
   const [rootCause, setRootCause] = useState(null); // { lastGoodStep, suggestedCell } | null
@@ -153,6 +168,12 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
   const stuckShownRef = useRef(false);
   const timerRef = useRef(null);
   const puzzleRef = useRef(null);
+  // Idle-triggered auto-hint (v3.2) — idleHintTimerRef holds the pending
+  // setTimeout; hintRef always points at the latest `hint` closure so
+  // scheduleIdleHint can be declared once, early, without caring about
+  // hint()'s own declaration order below.
+  const idleHintTimerRef = useRef(null);
+  const hintRef = useRef(null);
   // Whether any hint/tool (hint(), revealCell(), traceRootCause()) was
   // used this run — feeds the "no-hint" scoring bonus (v3.1).
   const usedToolRef = useRef(false);
@@ -183,7 +204,29 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     setHintStuck(false);
     setRevealedCell(null);
     setRootCause(null);
+    setPreviewCells([]);
   }, []);
+
+  const clearIdleHintTimer = useCallback(() => {
+    if (idleHintTimerRef.current) {
+      clearTimeout(idleHintTimerRef.current);
+      idleHintTimerRef.current = null;
+    }
+  }, []);
+
+  // Resets the idle-auto-hint clock — called from every player action
+  // (advanceTo/undo) and every other tool use, so the free auto-hint only
+  // fires after a real pause, not immediately after something just happened.
+  const scheduleIdleHint = useCallback(() => {
+    clearIdleHintTimer();
+    if (wonRef.current || !puzzleRef.current) return;
+    idleHintTimerRef.current = setTimeout(() => {
+      idleHintTimerRef.current = null;
+      if (!wonRef.current && hintRef.current) hintRef.current();
+    }, IDLE_AUTO_HINT_MS);
+  }, [clearIdleHintTimer]);
+
+  useEffect(() => clearIdleHintTimer, [clearIdleHintTimer]);
 
   const start = useCallback((newPuzzle) => {
     puzzleRef.current = newPuzzle;
@@ -198,13 +241,15 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     setHintStuck(false);
     setRevealedCell(null);
     setRootCause(null);
+    setPreviewCells([]);
     setStuckBannerVisible(false);
     stuckSinceRef.current = null;
     stuckShownRef.current = false;
     wonRef.current = false;
     setWon(false);
     usedToolRef.current = false;
-  }, []);
+    clearIdleHintTimer(); // not (re)started until the player's first tap
+  }, [clearIdleHintTimer]);
 
   // Resets progress on the *same* puzzle instance (no regeneration) — used
   // by "play again"/"retry" so a retry is actually a retry, not a new
@@ -266,6 +311,7 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
 
   const handleWin = useCallback(() => {
     wonRef.current = true;
+    clearIdleHintTimer();
     setWon(true);
     onWinRef.current &&
       onWinRef.current({
@@ -274,7 +320,7 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
         timeSec: elapsedRef.current,
         usedTool: usedToolRef.current,
       });
-  }, []);
+  }, [clearIdleHintTimer]);
 
   // Advance the path to (r,c) or retract; reads the synchronous pathRef so
   // rapid drag events never work off stale state.
@@ -282,6 +328,7 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     (r, c) => {
       const puzzle = puzzleRef.current;
       if (!puzzle || wonRef.current) return;
+      scheduleIdleHint(); // any interaction resets the idle-auto-hint clock
       const order = pathRef.current;
       const key = `${r}_${c}`;
 
@@ -330,18 +377,19 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
         checkStuck(next);
       }
     },
-    [setPath, triggerShake, handleWin, checkStuck]
+    [setPath, triggerShake, handleWin, checkStuck, scheduleIdleHint]
   );
 
   const undo = useCallback(() => {
     if (wonRef.current) return;
     const order = pathRef.current;
     if (order.length === 0) return;
+    scheduleIdleHint();
     const next = order.slice(0, -1);
     setPath(next);
     maybeResetStuck(next.length);
     onUndoUsedRef.current && onUndoUsedRef.current();
-  }, [setPath, maybeResetStuck]);
+  }, [setPath, maybeResetStuck, scheduleIdleHint]);
 
   // Marks (doesn't auto-place) the correct next cell so the player still
   // makes the move themselves. First checks whether the player's actual
@@ -350,6 +398,11 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
   // no longer reachable once the player has taken a different-but-valid
   // route, which is worse than useless. If nothing can complete the
   // position, says so instead of guessing.
+  //
+  // v3.2: no longer a manually-tapped button — this only ever fires now via
+  // scheduleIdleHint()'s timeout (free, automatic, ~IDLE_AUTO_HINT_MS after
+  // the player's last move). Kept as a plain function (not UI-bound) so the
+  // idle timer can call it through hintRef without an ordering dependency.
   const hint = useCallback(() => {
     const puzzle = puzzleRef.current;
     if (!puzzle || wonRef.current) return;
@@ -373,6 +426,10 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     onHintUsedRef.current && onHintUsedRef.current({ salvageable: true });
   }, []);
 
+  useEffect(() => {
+    hintRef.current = hint;
+  }, [hint]);
+
   // Magnifier (v3.1 §一之3): reveal the correct number for *any* tapped
   // cell, not just the next one in sequence — doesn't auto-place it, same
   // "player still makes the move" principle as hint().
@@ -383,6 +440,7 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     if (puzzle.clueMap[key] !== undefined) return; // clue cells already show their number
     if (pathRef.current.some(([fr, fc]) => fr === r && fc === c)) return; // already filled in
     usedToolRef.current = true;
+    scheduleIdleHint();
 
     const order = pathRef.current;
     const completion = completionFrom(puzzle, order);
@@ -392,17 +450,74 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     }
     const idx = completion.findIndex(([pr, pc]) => pr === r && pc === c);
     setRevealedCell({ key, num: idx + 1 });
-  }, []);
+  }, [scheduleIdleHint]);
 
   const traceRootCause = useCallback(() => {
     const puzzle = puzzleRef.current;
     const order = pathRef.current;
     if (!puzzle || wonRef.current || order.length < 2) return null;
     usedToolRef.current = true;
+    scheduleIdleHint();
     const result = traceRootCauseFrom(puzzle, order);
     setRootCause(result);
     return result;
-  }, []);
+  }, [scheduleIdleHint]);
+
+  // 接力筆 (v3.2): *auto-places* the next correct cell instead of just
+  // marking it — the one paid tool that actually advances the path. Safe to
+  // hand straight to advanceTo() since completionFrom guarantees the
+  // returned cell is adjacent and clue-consistent by construction, so it
+  // reuses advanceTo's win-check/checkStuck/taps bookkeeping for free.
+  const placeNextCell = useCallback(() => {
+    const puzzle = puzzleRef.current;
+    if (!puzzle || wonRef.current) return false;
+    const order = pathRef.current;
+    const nextNum = order.length + 1;
+    if (nextNum > puzzle.total) return false;
+    usedToolRef.current = true;
+    const completion = completionFrom(puzzle, order);
+    if (completion === null || completion === "unknown") {
+      setHintCell(null);
+      setHintStuck(true);
+      return false;
+    }
+    const [r, c] = completion[nextNum - 1];
+    advanceTo(r, c);
+    return true;
+  }, [advanceTo]);
+
+  // 引路符 (v3.2): preview (mark only, no digits) the next PREVIEW_LOOKAHEAD
+  // cells in sequence — a wider-but-shallower cousin of hint()/接力筆, shows
+  // the shape of the upcoming route without spoiling exact numbers.
+  const previewPath = useCallback(() => {
+    const puzzle = puzzleRef.current;
+    if (!puzzle || wonRef.current) return [];
+    const order = pathRef.current;
+    usedToolRef.current = true;
+    scheduleIdleHint();
+    const completion = completionFrom(puzzle, order);
+    if (completion === null || completion === "unknown") {
+      setHintCell(null);
+      setHintStuck(true);
+      setPreviewCells([]);
+      return [];
+    }
+    const upcoming = completion.slice(order.length, order.length + PREVIEW_LOOKAHEAD).map(([r, c]) => `${r}_${c}`);
+    setPreviewCells(upcoming);
+    return upcoming;
+  }, [scheduleIdleHint]);
+
+  // 靜心符 (v3.2): flat time-refund off the counted elapsed seconds — helps
+  // reach the golden/silver time-bonus tier. An instant, visible refund
+  // (the clock jumps back) rather than an invisible pause, so the effect is
+  // unambiguous to the player.
+  const freezeTime = useCallback(() => {
+    if (!puzzleRef.current || wonRef.current) return false;
+    usedToolRef.current = true;
+    scheduleIdleHint();
+    setElapsed((e) => Math.max(0, e - FREEZE_REFUND_SEC));
+    return true;
+  }, [scheduleIdleHint]);
 
   /* derived candidate cells (valid next taps) for gentle highlighting */
   const candidateSet = useMemo(() => {
@@ -437,6 +552,7 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     hintCell,
     hintStuck,
     revealedCell,
+    previewCells,
     stuckBannerVisible,
     rootCause,
     start,
@@ -446,6 +562,9 @@ export function useGameSession({ onWin, onHintUsed, onUndoUsed } = {}) {
     hint,
     revealCell,
     traceRootCause,
+    placeNextCell,
+    previewPath,
+    freezeTime,
     dismissStuckBanner,
   };
 }

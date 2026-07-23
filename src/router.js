@@ -1,6 +1,6 @@
 import { isValidDateStr, clampToToday, todayUTCString } from "./dateUtil.js";
 
-const ROUTES = new Set(["number-link", "history"]);
+const ROUTES = new Set(["number-link", "history", "rules"]);
 const DAILY_ROUTE = /^daily(?:\/(\d{4}-\d{2}-\d{2}))?$/;
 // The captured number's meaning changed from a fixed level-array index to a
 // chapter board size (v3.1 restructure) — the route shape itself is
