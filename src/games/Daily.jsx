@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Timer, Feather, Home, Share2, Flame } from "lucide-react";
+import { Timer, Feather, Home, Share2, Flame, RotateCcw } from "lucide-react";
 import { COLORS, inkWashStyle, homeBtnStyle, brandRowStyle, eyebrowStyle } from "../theme.jsx";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "../components/LangToggle.jsx";
@@ -9,14 +9,14 @@ import { buildDailyPuzzle } from "../engine/daily.mjs";
 import { fmtTime, buildDailyAnalyticsParams } from "../engine/share.mjs";
 import { createStreakStore } from "../engine/streak.mjs";
 import { getDailyEntry, recordDailyCompletion } from "../dailyHistory.js";
+import { getRestartCount, recordDailyRestart, DAILY_RESTART_LIMIT } from "../dailyRestarts.js";
 import { todayUTCString } from "../dateUtil.js";
 import { shareDaily } from "../daily/shareFlow.js";
 import { trackShareConversion } from "../daily/attribution.js";
 import { track } from "../analytics.js";
 import { recordLevelCompletion } from "../pwaInstall.js";
-import { parTimeSec, computeScore } from "../engine/score.mjs";
-import ScoreBreakdown from "./numberlink/ScoreBreakdown.jsx";
 import { addPoints } from "../pointsWallet.js";
+import { dailyPointsReward } from "../engine/dailyReward.mjs";
 
 const TEXT = {
   zh: {
@@ -32,6 +32,7 @@ const TEXT = {
     mistakesLabel: (n) => (n === 0 ? "零失誤" : `${n} 次失誤`),
     perfectBadge: "🖋 完美",
     streakLabel: (n) => `🔥 連續 ${n} 天`,
+    replay: "再玩一次",
     share: "分享成績",
     shared: "已複製到剪貼簿",
     alreadyDoneTitle: "今日已完成",
@@ -42,13 +43,9 @@ const TEXT = {
     rescueConfirm: "觀看一段小短片以救回昨天的連續紀錄？（P0 暫以此對話框代替廣告）",
     rescueSuccess: "已救回！請完成今日題延續紀錄。",
     rescueFailed: "這次無法救回。",
-    scoreBase: "完成",
-    scoreTime: "速度",
-    scoreAccuracy: "準確度",
-    scoreNoHint: "無提示",
-    scoreMilestone: "里程碑",
     scoreTotal: "積分",
     scoreBalance: (gain, balance) => `本關 +${gain} 分，目前總分 ${balance}`,
+    restartLimitReached: "今日重來次數已用完，請完成目前進度",
   },
   en: {
     home: "Home",
@@ -63,6 +60,7 @@ const TEXT = {
     mistakesLabel: (n) => (n === 0 ? "No mistakes" : `${n} mistakes`),
     perfectBadge: "🖋 Perfect",
     streakLabel: (n) => `🔥 ${n}-day streak`,
+    replay: "Play Again",
     share: "Share result",
     shared: "Copied to clipboard",
     alreadyDoneTitle: "Today's puzzle is done",
@@ -73,13 +71,9 @@ const TEXT = {
     rescueConfirm: "Watch a short clip to rescue yesterday's streak? (P0 stand-in for the rewarded ad)",
     rescueSuccess: "Rescued! Finish today's puzzle to keep it going.",
     rescueFailed: "Couldn't rescue this time.",
-    scoreBase: "Complete",
-    scoreTime: "Speed",
-    scoreAccuracy: "Accuracy",
-    scoreNoHint: "No hint",
-    scoreMilestone: "Milestone",
     scoreTotal: "Score",
     scoreBalance: (gain, balance) => `+${gain} this level, ${balance} total`,
+    restartLimitReached: "No retries left today — finish with your current progress",
   },
 };
 
@@ -100,11 +94,22 @@ export default function Daily({ date, onExit }) {
   const [justCompleted, setJustCompleted] = useState(null);
   const historyEntry = justCompleted && justCompleted.date === date ? justCompleted.entry : persistedEntry;
 
+  // Restart ("重來") count for today's in-progress attempt, capped at
+  // DAILY_RESTART_LIMIT — re-derived on date change the same way
+  // persistedEntry is, so navigating between dates picks up each date's own
+  // count instead of carrying one date's tally onto another.
+  const [restartCount, setRestartCount] = useState(() => getRestartCount(date));
+  useEffect(() => {
+    setRestartCount(getRestartCount(date));
+  }, [date]);
+
   const [streakStatus, setStreakStatus] = useState(() => streakStore.status(today));
   const [toast, setToast] = useState(null);
   const [rescuing, setRescuing] = useState(false);
-  const [lastScore, setLastScore] = useState(null);
   const [pointsBalance, setPointsBalance] = useState(null);
+  // "再玩一次" on an already-completed day replays the same puzzle for fun
+  // without re-recording the completion/streak/points — see handleWin.
+  const [practiceMode, setPracticeMode] = useState(false);
   const toastTimeout = useRef(null);
 
   const puzzle = useMemo(() => {
@@ -120,38 +125,43 @@ export default function Daily({ date, onExit }) {
   }, []);
 
   const handleWin = useCallback(
-    ({ mistakes, timeSec, usedTool }) => {
+    ({ mistakes, timeSec }) => {
+      // Practice replay of an already-completed day: let the player finish
+      // for fun, but don't touch dailyHistory/streak/points a second time.
+      if (practiceMode) {
+        setPracticeMode(false);
+        return;
+      }
       const perfect = mistakes === 0;
-      // Daily has no chapter/milestone concept of its own — score still
-      // applies (v3.1 scoring covers both modes) but the milestone bonus
-      // never fires here.
-      const clueRatio = Object.keys(puzzle.clueMap).length / puzzle.total;
-      const par = parTimeSec(puzzle.n, clueRatio);
-      const score = computeScore({ timeSec, parTimeSec: par, mistakes, usedTool, justHitMilestone: false });
-      const entry = { perfect, mistakes, timeSec, size: puzzle.n, score: score.total, completedAt: Date.now() };
-      recordDailyCompletion(date, entry);
-      setJustCompleted({ date, entry });
-      setLastScore(score);
-      setPointsBalance(addPoints(score.total));
 
+      // Streak first: the reward scales with the streak *after* today
+      // counts, so it has to be known before computing how many points
+      // this completion is worth.
       let status = streakStatus;
       if (isToday) {
         status = streakStore.recordCompletion(date, { perfect, timeSec });
         setStreakStatus(status);
         trackShareConversion(date);
       }
+      const reward = dailyPointsReward(status ? status.streak : 0);
+
+      const entry = { perfect, mistakes, timeSec, size: puzzle.n, score: reward, completedAt: Date.now() };
+      recordDailyCompletion(date, entry);
+      setJustCompleted({ date, entry });
+      setPointsBalance(addPoints(reward));
+
       track("daily_complete", buildDailyAnalyticsParams(date, {
         date,
         size: puzzle.n,
         time_sec: timeSec,
         mistakes,
         perfect,
-        score: score.total,
+        score: reward,
         streak: status ? status.streak : 0,
       }));
       recordLevelCompletion();
     },
-    [date, isToday, puzzle, streakStatus, streakStore]
+    [practiceMode, date, isToday, puzzle, streakStatus, streakStore]
   );
 
   const session = useGameSession({
@@ -159,6 +169,24 @@ export default function Daily({ date, onExit }) {
     onHintUsed: (info) => track("hint_used", { context: "daily", salvageable: info?.salvageable }),
     onUndoUsed: () => track("undo_used", { context: "daily" }),
   });
+
+  // Resets today's in-progress attempt, gated by DAILY_RESTART_LIMIT so a
+  // player can't retry indefinitely until a perfect run. Only counts against
+  // the limit for the actual (not-yet-recorded) attempt — historyEntry is
+  // only truthy here in the practiceMode branch (see the recap/GameArea
+  // switch below), which stays unlimited since it already doesn't touch
+  // dailyHistory/streak/points either.
+  const handleRestart = useCallback(() => {
+    if (!historyEntry) {
+      if (restartCount >= DAILY_RESTART_LIMIT) return;
+      const next = recordDailyRestart(date);
+      setRestartCount(next);
+      if (next >= DAILY_RESTART_LIMIT) showToast(t.restartLimitReached);
+    }
+    session.restart();
+  }, [historyEntry, restartCount, date, session.restart, showToast, t.restartLimitReached]);
+
+  const restartsRemaining = historyEntry ? null : Math.max(0, DAILY_RESTART_LIMIT - restartCount);
 
   // Fire daily_fail_abandon when leaving an in-progress (unsolved, not
   // already-completed-before-this-session) puzzle: on navigating away, or
@@ -199,6 +227,15 @@ export default function Daily({ date, onExit }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [puzzle, date]);
 
+  // Daily doesn't unmount when navigating between dates (App.jsx just
+  // updates the `date` prop on the same instance, e.g. via a shared link to
+  // a different day), so a lingering practiceMode from the previous date
+  // would otherwise show that new date's GameArea even when it's already
+  // completed and should show its RecapCard.
+  useEffect(() => {
+    setPracticeMode(false);
+  }, [date]);
+
   useEffect(() => {
     return () => {
       if (toastTimeout.current) clearTimeout(toastTimeout.current);
@@ -233,13 +270,13 @@ export default function Daily({ date, onExit }) {
       } else if (e.key === "r" || e.key === "R") {
         if (session.filledOrder.length > 0 && !session.won) {
           e.preventDefault();
-          session.restart();
+          handleRestart();
         }
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onExit, historyEntry, session.puzzle, session.filledOrder.length, session.won, session.undo, session.restart]);
+  }, [onExit, historyEntry, session.puzzle, session.filledOrder.length, session.won, session.undo, handleRestart]);
 
   const handleShare = useCallback(async () => {
     const entry = historyEntry;
@@ -255,6 +292,11 @@ export default function Daily({ date, onExit }) {
     });
     if (result.method === "clipboard") showToast(t.shared);
   }, [historyEntry, puzzle, date, streakStatus, lang, showToast, t.shared]);
+
+  const handleReplay = useCallback(() => {
+    setPracticeMode(true);
+    session.restart();
+  }, [session.restart]);
 
   const handleRescue = useCallback(() => {
     if (typeof window !== "undefined" && window.confirm) {
@@ -312,18 +354,19 @@ export default function Daily({ date, onExit }) {
           </div>
         )}
 
-        {historyEntry ? (
+        {historyEntry && !practiceMode ? (
           <RecapCard
             entry={historyEntry}
-            fullScore={justCompleted && justCompleted.date === date ? lastScore : null}
+            justEarned={justCompleted && justCompleted.date === date ? justCompleted.entry.score : null}
             pointsBalance={justCompleted && justCompleted.date === date ? pointsBalance : null}
             isToday={isToday}
             streakStatus={streakStatus}
+            onReplay={handleReplay}
             onShare={handleShare}
             t={t}
           />
         ) : (
-          <GameArea session={session} t={t} />
+          <GameArea session={session} t={t} onRestart={handleRestart} restartsRemaining={restartsRemaining} />
         )}
 
         {newMilestone && <div style={styles.milestoneStamp}>{t.milestone(newMilestone)}</div>}
@@ -333,7 +376,7 @@ export default function Daily({ date, onExit }) {
   );
 }
 
-function GameArea({ session, t }) {
+function GameArea({ session, t, onRestart, restartsRemaining }) {
   const { puzzle, taps, mistakes, elapsed, won } = session;
   if (!puzzle) return null;
   const nextNum = session.filledOrder.length + 1;
@@ -347,30 +390,22 @@ function GameArea({ session, t }) {
         <StatPill label={t.mistakes(mistakes)} warn={mistakes > 0} />
       </div>
 
-      <PlayArea session={session} showTools toolContext="daily" />
+      <PlayArea session={session} showTools toolContext="daily" onRestart={onRestart} restartsRemaining={restartsRemaining} />
     </>
   );
 }
 
-function RecapCard({ entry, fullScore, pointsBalance, isToday, streakStatus, onShare, t }) {
+function RecapCard({ entry, justEarned, pointsBalance, isToday, streakStatus, onReplay, onShare, t }) {
   return (
     <div style={styles.recapCard}>
       <Feather size={26} color="#B23A2E" />
       <div style={styles.recapTitle}>{isToday ? t.alreadyDoneTitle : t.alreadyDoneTitlePast}</div>
       <div style={styles.recapStats}>
         {fmtTime(entry.timeSec)} · {entry.perfect ? t.perfectBadge : t.mistakesLabel(entry.mistakes)}
-        {entry.score != null && !fullScore && ` · ${t.scoreTotal} ${entry.score}`}
+        {entry.score != null && ` · ${t.scoreTotal} ${entry.score}`}
       </div>
-      {fullScore && (
-        <ScoreBreakdown
-          score={fullScore}
-          pointsBalance={pointsBalance}
-          labels={{
-            base: t.scoreBase, time: t.scoreTime, accuracy: t.scoreAccuracy,
-            noHint: t.scoreNoHint, milestone: t.scoreMilestone, total: t.scoreTotal,
-            balance: t.scoreBalance,
-          }}
-        />
+      {justEarned != null && pointsBalance != null && (
+        <div style={styles.pointsLine}>{t.scoreBalance(justEarned, pointsBalance)}</div>
       )}
       {isToday && streakStatus.streak >= 2 && (
         <div style={styles.recapStreak}>
@@ -378,8 +413,12 @@ function RecapCard({ entry, fullScore, pointsBalance, isToday, streakStatus, onS
           <span>{t.streakLabel(streakStatus.streak)}</span>
         </div>
       )}
-      <button onClick={onShare} style={styles.shareBtn}>
-        <Share2 size={16} />
+      <button onClick={onReplay} style={styles.primaryBtn}>
+        <RotateCcw size={16} />
+        <span>{t.replay}</span>
+      </button>
+      <button onClick={onShare} style={styles.shareLink}>
+        <Share2 size={12} />
         <span>{t.share}</span>
       </button>
     </div>
@@ -530,7 +569,13 @@ const styles = {
     color: COLORS.ochre,
     fontFamily: "'Noto Serif TC', serif",
   },
-  shareBtn: {
+  pointsLine: {
+    fontSize: 12.5,
+    color: "#B8925A",
+    fontFamily: "'EB Garamond', serif",
+    letterSpacing: 0.5,
+  },
+  primaryBtn: {
     marginTop: 10,
     display: "flex",
     alignItems: "center",
@@ -544,6 +589,22 @@ const styles = {
     fontWeight: 600,
     fontFamily: "'Noto Serif TC', serif",
     letterSpacing: 2,
+    cursor: "pointer",
+  },
+  // Small, secondary — share is a promo nudge here, not the main action.
+  shareLink: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    marginTop: 2,
+    padding: "5px 10px",
+    background: "transparent",
+    border: "none",
+    color: "#8B8478",
+    fontSize: 11.5,
+    fontFamily: "'EB Garamond', serif",
+    letterSpacing: 0.5,
     cursor: "pointer",
   },
   milestoneStamp: {

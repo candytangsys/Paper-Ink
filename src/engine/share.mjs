@@ -35,6 +35,33 @@ export function buildShareUrl({ baseUrl, date, refId }) {
   return u.toString();
 }
 
+// Regular-level share (v3.3): promotional, not a result card — a level's
+// board is freshly randomized per play, so there's no "same puzzle" to
+// deep-link into or spoil. Sends people to the app itself rather than any
+// specific level.
+export function buildLevelShareText({ size, level, timeSec, perfect, lang = "zh" }) {
+  const t = fmtTime(timeSec);
+  if (lang === "zh") {
+    return [
+      `紙墨筆・一筆連`,
+      `${size}×${size} 第 ${level} 關｜${t}${perfect ? "｜🖋 零失誤" : ""}`,
+      `依序連接數字、一筆畫成的紙墨風解謎遊戲，來挑戰看看吧！`,
+    ].join("\n");
+  }
+  return [
+    `Paper & Ink · One-Stroke Path`,
+    `${size}×${size} Level ${level} | ${t}${perfect ? " | 🖋 Perfect" : ""}`,
+    `A literary ink-and-paper number-path puzzle — give it a try!`,
+  ].join("\n");
+}
+
+export function buildLevelShareUrl({ baseUrl, refId }) {
+  const u = new URL(baseUrl);
+  u.searchParams.set("utm_source", "share");
+  u.searchParams.set("ref", refId);
+  return u.toString();
+}
+
 // Placeholder until the real launch date is locked in — update this one
 // constant when it is. Not shown to players anywhere (see buildDailyAnalyticsParams
 // below): day_index is a backend-only analytics dimension now, not UI copy.

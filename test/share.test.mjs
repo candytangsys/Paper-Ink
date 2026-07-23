@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildShareText, buildShareUrl, dailyNumber, buildDailyAnalyticsParams, fmtTime } from "../src/engine/share.mjs";
+import {
+  buildShareText, buildShareUrl, dailyNumber, buildDailyAnalyticsParams, fmtTime,
+  buildLevelShareText, buildLevelShareUrl,
+} from "../src/engine/share.mjs";
 import { createRefIdStore } from "../src/engine/refId.mjs";
 
 test("share text carries the perfect badge", () => {
@@ -70,6 +73,26 @@ test("buildDailyAnalyticsParams works with no extra params (daily_open has none 
 test("fmtTime pads minutes and seconds", () => {
   assert.equal(fmtTime(65), "01:05");
   assert.equal(fmtTime(5), "00:05");
+});
+
+test("level share text carries size, level, and the perfect badge", () => {
+  const text = buildLevelShareText({ size: 8, level: 12, timeSec: 65, perfect: true, lang: "zh" });
+  assert.match(text, /8×8/);
+  assert.match(text, /12/);
+  assert.match(text, /零失誤/);
+});
+
+test("level share text omits the perfect badge when imperfect", () => {
+  const text = buildLevelShareText({ size: 8, level: 12, timeSec: 65, perfect: false, lang: "en" });
+  assert.doesNotMatch(text, /Perfect/);
+});
+
+test("level share url carries attribution params but no level-specific deep link", () => {
+  const url = buildLevelShareUrl({ baseUrl: "https://candytangsys.github.io/Paper-Ink/", refId: "u_abc12345" });
+  const parsed = new URL(url);
+  assert.equal(parsed.searchParams.get("ref"), "u_abc12345");
+  assert.equal(parsed.searchParams.get("utm_source"), "share");
+  assert.doesNotMatch(url, /#\/number-link/);
 });
 
 test("refId store creates and persists an anonymous id", () => {

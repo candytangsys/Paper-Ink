@@ -1,5 +1,101 @@
 # CHANGELOG
 
+## v1.17 — Boot splash waits for a tap instead of auto-dismissing
+
+Per feedback: the loading screen's ink-stroke animation is a liked visual
+moment that was disappearing on its own after ~1s — too quick to actually
+enjoy. It now holds once ready and lets the player decide when to move on.
+
+### Changed
+
+- **`LoadingScreen.jsx` gained a `readyToEnter` state**: once App.jsx's existing min-display/fonts-ready gate is satisfied, the splash no longer starts fading on its own — it keeps looping the ink-stroke animation and reveals a "點擊進入" / "Tap to Enter" button beneath the brand mark. Only clicking it (`onEnter`) starts the same 260ms fade-out as before. Root's `pointer-events` now only turns `none` during that actual fade (previously always `none`, which harmlessly let early clicks fall through to Home during the old brief auto-timeout — now that the wait is indefinite, that would let a player accidentally hit a Home tile hidden behind the splash, so it's blocked until the fade begins).
+- **`App.jsx`'s `bootPhase`** gained a `'readyToEnter'` step between `'loading'` and `'exiting'` (`'loading' → 'readyToEnter' → 'exiting' → 'ready'`); the fonts/min-wait effect now lands on `'readyToEnter'` instead of `'exiting'`, and a new `handleEnter` (wired to `LoadingScreen`'s `onEnter`) is what actually advances to `'exiting'`. `LOADING_MIN_MS`/`LOADING_CAP_MS`/`LOADING_FADE_MS` timings are unchanged — they still gate *when the button appears*, just not when the splash disappears.
+
+### Verification
+
+- `npm test` — 68/68 passing (unaffected, no engine logic touched).
+- `npm run build` — succeeds.
+- Driven in headless Chromium (Playwright): the splash shows no button for the first ~150ms; after the gate passes (~1.2s) "點擊進入" appears and the stroke keeps looping; waiting an additional 1.5s with no click confirms it never auto-advances; clicking the button fades the splash and reveals Home underneath with no console errors.
+
+---
+
+## v1.16 — Onboarding walkthrough replaced with an animated 2×2 demo
+
+Feedback on the v3.2 onboarding modal: four bullet points of text didn't
+actually teach the *feel* of the game. Content stays scoped to the same
+2×2 chapter it always was (`CHAPTERS[0]`, first 3 clears — unchanged
+gating), but every step now animates instead of just describing.
+
+### Changed
+
+- **`OnboardingIntro.jsx` rewritten as a 4-step carousel**, each step looping a small live-looking 2×2 board (built from the real `boardMetrics()`/`inkTrailColor()` the actual board uses, so it's visually identical, not a mocked-up illustration): ① connect — a pulsing ring walks 1→2→3→4 (including one diagonal step, so "8 directions" is shown, not just claimed) and fills in as it goes; ② undo/retry — the board fills to 3, an animated 回退 chip retracts one step, then a 重來 chip clears it, before it re-fills for the next loop; ③ auto-hint — after a simulated pause, the next cell pulses amber exactly like the real idle auto-hint; ④ tools & points — the 5 tool icons stagger in one at a time alongside a `+50` points chip. Steps advance manually (上一步/下一步 + dot indicator), with a "略過" skip link and the rules-page link kept on every step. All animation is plain component state cycling on a self-scheduling timer (no CSS keyframes to keep in sync), respects `prefers-reduced-motion` by freezing on each step's most complete frame instead of looping.
+- Old static text-list version and its four hardcoded caption lines are gone; `NumberLink.jsx`'s `showIntro` gating and `onDismiss`/`markIntroSeen` wiring are untouched — only `OnboardingIntro.jsx`'s internals changed.
+
+### Verification
+
+- `npm test` — 68/68 passing (unaffected — no engine logic touched, this is UI-only).
+- `npm run build` — succeeds.
+- Driven in headless Chromium (Playwright) at a 420×800 viewport: all 4 steps step through cleanly via 下一步/上一步 with no console errors; the connect/undo/hint demos visibly animate frame-to-frame; the tools step staggers in all 5 icons + the points chip; dismissing via "開始遊戲" reveals the real, playable 2×2 board underneath unaffected; `prefers-reduced-motion: reduce` freezes step ① on the fully-connected celebration frame instead of animating; English copy fits the card at the same viewport with no overflow.
+
+---
+
+## v1.15 — Daily Challenge's "重來" capped at 3 attempts per day
+
+### Changed
+
+- **Daily's in-progress "重來" (restart) is no longer unlimited.** New `src/dailyRestarts.js` (`getRestartCount(date)` / `recordDailyRestart(date)`, `DAILY_RESTART_LIMIT = 3`), keyed by date like `dailyHistory.js` so past/future dates never share a counter. `Daily.jsx`'s new `handleRestart` wraps `session.restart()` and only counts against the limit while today's puzzle is still un-recorded (`!historyEntry`) — both the bottom-row 重來 button and the `R` keyboard shortcut now route through it. Once exhausted, the button disables and a toast explains it ("今日重來次數已用完，請完成目前進度"); the player has to finish with whatever progress they've got, closer to a real one-shot daily puzzle. The post-completion "再玩一次" practice replay (`practiceMode`) is untouched and stays unlimited — it already doesn't touch `dailyHistory`/streak/points, so there was nothing to gate there.
+- **`PlayArea.jsx`'s 重來 button** gained optional `onRestart`/`restartsRemaining` props (both default to the old unlimited `session.restart()` behavior when omitted) so only Daily's caller shows a remaining-count label ("重來 (2)") and disables at 0 — `NumberLink.jsx`'s regular levels don't pass either prop and keep unlimited retries exactly as before.
+
+### Verification
+
+- `npm test` — 68/68 passing (3 new: `test/dailyRestarts.test.mjs` covering per-date increment/persistence and the exported limit constant).
+- `npm run build` — succeeds.
+- Not driven in a live browser this session — recommend manually checking: Daily's 重來 button shows a shrinking count after each use, disables at 0 with the current progress still playable to completion, the `R` key respects the same limit, and a regular level's 重來/重新出題 buttons are still unlimited.
+
+---
+
+## v1.14 — Streak-scaled Daily reward, escalating tool prices, two layout bugs fixed
+
+### Changed
+
+- **Daily's reward now scales with streak** instead of the flat 50 from v1.13: `DAILY_BASE_REWARD` (50) + a bonus of `DAILY_STREAK_BONUS_PER_DAY` (2) points per additional consecutive day, capped at `DAILY_STREAK_BONUS_CAP` (100) — new `src/engine/dailyReward.mjs`, `dailyPointsReward(streak)`. `Daily.jsx`'s `handleWin` now computes the streak status *before* the reward (the bonus needs to know the streak length *after* today counts), then persists/adds whatever that run actually earned — `RecapCard` reads it back off the stored entry (`justCompleted.entry.score`) rather than a fixed constant.
+- **Tool point-costs now escalate per repeated purchase** — buying the same tool with points repeatedly raises its price +20% each time (compounding on the base cost, tracked per tool independently so buying 放大鏡 a lot doesn't touch 溯源符's price). New `getToolCost(baseCost, toolKey)` / `getToolPurchaseCount(toolKey)` in `toolUnlock.js`, persisted under `tool_purchase_counts_v1`; `unlockViaPoints` now takes `(toolKey, baseCost)` instead of a flat cost and bumps the counter on a successful spend. Watching an ad is unaffected — always free, no scaling. `PlayArea.jsx`'s toolbar badges and the unlock picker now always display the *live* (already-escalated) price, not the static base constant.
+- `RulesPage.jsx` updated to describe both of the above (streak-scaled Daily reward, "起價"/"from" cost framing for tools, and the +20%-per-purchase note).
+
+### Fixed
+
+- **Onboarding intro could show on the wrong chapter.** It was gated on a single global "seen it once, ever" flag with no check on *which* chapter was being entered — so a player without that flag set (e.g. a fresh browser profile with otherwise-intact progress) deep-linking straight into a large, already-unlocked chapter would get the "tap 1 to start" walkthrough on an 8×8 board. Now also requires `chapterSize === CHAPTERS[0]` (the smallest chapter) and `chapterClearCount < 3` — it only ever appears where it's actually relevant, still exactly once (`markIntroSeen()`/`tutorialIntro.js` unchanged).
+- **Regular levels' control buttons (回退/重來/the 5-tool rail) were missing on the smallest two chapters.** `CONTROLS_HIDDEN_SIZES` (sizes 2 and 3) predates the onboarding walkthrough — it used to hide those controls so a brand-new player learned bare tap mechanics first. Once the walkthrough started explicitly teaching 回退/重來/the tool rail (this session's earlier onboarding work), that same gate was still hiding exactly those controls on exactly the chapter the walkthrough runs on, so the game told players about buttons that then weren't there. `CONTROLS_HIDDEN_SIZES` removed from `engine/chapters.mjs`; every chapter now shows the full control surface.
+
+### Verification
+
+- `npm test` — 65/65 passing (5 new: `dailyReward.test.mjs`, `toolUnlock.test.mjs`'s escalating-cost coverage).
+- `npm run build` — succeeds.
+- Not driven in a live browser this session — recommend manually checking: Daily's reward number visibly grows with a longer streak (and caps out eventually); repeatedly buying one tool with points raises only that tool's displayed price on both the toolbar badge and the unlock picker, while an ad-unlock stays free; the onboarding modal appears on a fresh chapter-2 attempt and not when deep-linking into a larger already-unlocked chapter; 回退/重來/the tool rail are visible on chapters 2 and 3 now, not just 4+.
+
+---
+
+## v1.13 — Daily's flat 50pt reward, "再玩一次" replaces share as the primary CTA, promotional share on every win screen
+
+### Changed
+
+- **Daily Challenge points are now a flat 50** (`DAILY_POINTS_REWARD` in `Daily.jsx`), regardless of time/mistakes — decoupled entirely from `computeScore()`'s performance breakdown, which Daily no longer computes or displays at all (that machinery was only ever used to feed `addPoints`/the score card; both are gone). The idea: the daily habit itself is what's being rewarded, not how well any single day went. `RulesPage.jsx` updated to describe the two point models (variable for regular levels, flat for Daily) separately instead of one formula that no longer applied to both.
+- **Regular levels' win card no longer shows the itemized point-rule breakdown** ("完成 +10 · 速度 +10 · ..." — the "why did I get this score" line). `ScoreBreakdown.jsx` gained a `compact` prop that skips that line while keeping the total and the wallet-balance line; `NumberLink.jsx`'s win card is the only caller using it (Daily's card doesn't use `ScoreBreakdown` anymore at all — see above). Feedback was that the full breakdown made the win screen read as a rules dump.
+- **Daily's recap card**: primary CTA is now "再玩一次" (replay), not "分享成績". Replaying calls the existing `session.restart()` on the same puzzle, gated by a new `practiceMode` flag so a replay's win does *not* re-record `dailyHistory`/streak/points a second time (`Daily.jsx`'s `handleWin` short-circuits and just flips `practiceMode` back off) — otherwise a player could farm points by replaying the same day repeatedly. `practiceMode` resets on `date` change too, since `Daily.jsx` doesn't unmount when navigating between dates (e.g. via a shared link to a different day) and a stale `practiceMode=true` would incorrectly show that new date's board instead of its recap.
+- **Share demoted to a small secondary link** ("not the protagonist" per feedback) on every win screen now, not just Daily's: both `NumberLink.jsx`'s win card and `Daily.jsx`'s recap card show it as a small muted text link below the primary action(s), instead of a prominent button.
+
+### Added
+
+- **Regular levels can now share too** — previously share only existed on Daily. New `src/games/numberlink/levelShareFlow.js` (`shareLevel()`, Web-Share-API-then-clipboard-fallback, no canvas image — that's Daily-specific complexity this doesn't need for a small secondary action) plus `buildLevelShareText`/`buildLevelShareUrl` in `engine/share.mjs`. Share copy is promotional by design (game name + a one-line invite), not a spoiler-safe result card like Daily's — a regular level's board is freshly randomized per play, so there's no "same puzzle" to protect. Points to the app root with attribution params, not a level-specific deep link (levels aren't stable/shareable the way a dated Daily puzzle is).
+
+### Verification
+
+- `npm test` — 60/60 passing (3 new: `buildLevelShareText`/`buildLevelShareUrl` coverage in `test/share.test.mjs`).
+- `npm run build` — succeeds.
+- Not driven in a live browser this session — recommend manually checking: Daily reward is always exactly 50 regardless of mistakes/time; "再玩一次" replays the same daily puzzle and returns to the *original* recap (unchanged score) afterward, without double-counting streak/points; regular levels' win card shows total + balance but no itemized breakdown; both win screens' share buttons read as secondary/small next to the primary actions; sharing a regular level produces sensible bilingual promotional text.
+
+---
+
 ## v1.12 — Unified play layout, 5-tool economy, passive hint, onboarding, Rules page
 
 Playtesting feedback on v1.11's tool buttons: Daily and regular levels had diverged layouts, the tool roster needed to grow past 2, 提示 (hint) as a manual free button was redundant now that a real economy exists, and new players had zero onboarding into any of this.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { HOME_COLORS, HOME_FONT_SERIF, HOME_FONT_MONO } from "../homeTheme.js";
+import { useLanguage } from "../i18n.jsx";
 
 /* ---------------------------------------------------------
    F6-b boot loading screen. The signature element is the ink
@@ -7,13 +8,27 @@ import { HOME_COLORS, HOME_FONT_SERIF, HOME_FONT_MONO } from "../homeTheme.js";
    core game mechanic, made visible before the player even
    reaches the home screen. Not a generic spinner: the stroke
    literally draws the same kind of path the puzzles use.
+
+   v3.3: no longer auto-dismisses on its own timer. Once the
+   min-display/fonts-ready gate in App.jsx is satisfied it keeps
+   looping the stroke animation but also reveals an "Enter"
+   button (readyToEnter) — the player decides when to leave the
+   splash, App.jsx only starts the actual fade-out after onEnter
+   fires.
 --------------------------------------------------------- */
+
+const TEXT = {
+  zh: { enter: "點擊進入" },
+  en: { enter: "Tap to Enter" },
+};
 
 function prefersReducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-export default function LoadingScreen({ exiting }) {
+export default function LoadingScreen({ exiting, readyToEnter, onEnter }) {
+  const { lang } = useLanguage();
+  const t = TEXT[lang];
   const [reduced, setReduced] = useState(false);
 
   useEffect(() => {
@@ -21,7 +36,10 @@ export default function LoadingScreen({ exiting }) {
   }, []);
 
   return (
-    <div style={{ ...styles.root, opacity: exiting ? 0 : 1 }} aria-hidden={exiting}>
+    <div
+      style={{ ...styles.root, opacity: exiting ? 0 : 1, pointerEvents: exiting ? "none" : "auto" }}
+      aria-hidden={exiting}
+    >
       <svg viewBox="0 0 132 132" style={styles.mark}>
         <path
           d="M30 34 C 50 20, 62 18, 70 24 S 96 36, 104 46 S 100 76, 96 88 S 66 104, 54 102 S 20 92, 24 80"
@@ -44,6 +62,11 @@ export default function LoadingScreen({ exiting }) {
       </svg>
       <div style={styles.title}>紙&nbsp;墨&nbsp;筆</div>
       <div style={styles.subtitle}>Paper &amp; Ink · 一筆連</div>
+      {readyToEnter && (
+        <button onClick={onEnter} autoFocus style={styles.enterBtn} className="ink-rise">
+          {t.enter}
+        </button>
+      )}
       <style>{`
         @keyframes loading-draw {
           0% { stroke-dashoffset: 520; }
@@ -66,7 +89,6 @@ const styles = {
     justifyContent: "center",
     background: `radial-gradient(120% 90% at 50% 15%, #F8F3E6 0%, ${HOME_COLORS.paper} 55%, ${HOME_COLORS.paperDeep} 100%)`,
     transition: "opacity 0.26s ease",
-    pointerEvents: "none",
   },
   mark: { width: 132, height: 132 },
   title: {
@@ -84,5 +106,18 @@ const styles = {
     color: HOME_COLORS.inkFaint,
     marginTop: 8,
     textTransform: "uppercase",
+  },
+  enterBtn: {
+    marginTop: 34,
+    padding: "12px 36px",
+    borderRadius: 4,
+    border: `1px solid ${HOME_COLORS.seal}`,
+    background: HOME_COLORS.seal,
+    color: HOME_COLORS.paper,
+    fontFamily: HOME_FONT_SERIF,
+    fontWeight: 600,
+    fontSize: 14,
+    letterSpacing: "0.15em",
+    cursor: "pointer",
   },
 };

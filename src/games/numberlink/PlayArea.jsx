@@ -6,7 +6,7 @@ import ToolUnlockSheet from "./ToolUnlockSheet.jsx";
 import { getPointsBalance } from "../../pointsWallet.js";
 import {
   MAGNIFIER_COST, ROOT_CAUSE_COST, RELAY_COST, PREVIEW_COST, FREEZE_COST,
-  unlockViaAd, unlockViaPoints,
+  unlockViaAd, unlockViaPoints, getToolCost,
 } from "../../toolUnlock.js";
 import { track } from "../../analytics.js";
 import { isDesktopViewport } from "../../deviceUtil.js";
@@ -32,6 +32,7 @@ const TEXT = {
   zh: {
     undo: "回退",
     retry: "重來",
+    retryRemaining: (n) => (n > 0 ? `今日還可重來 ${n} 次` : "今日重來次數已用完"),
     startHint: "點擊「1」開始畫線",
     pointsLabel: "積分",
     zoomIn: "放大盤面",
@@ -56,6 +57,7 @@ const TEXT = {
   en: {
     undo: "Undo",
     retry: "Retry",
+    retryRemaining: (n) => (n > 0 ? `${n} retries left today` : "No retries left today"),
     startHint: "Tap “1” to start drawing",
     pointsLabel: "Points",
     zoomIn: "Zoom in",
@@ -79,7 +81,7 @@ const TEXT = {
   },
 };
 
-export default function PlayArea({ session, showTools = true, toolContext = "tutorial" }) {
+export default function PlayArea({ session, showTools = true, toolContext = "tutorial", onRestart, restartsRemaining = null }) {
   const { lang } = useLanguage();
   const t = TEXT[lang];
   const {
@@ -126,7 +128,7 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
 
   const handleSpendPoints = useCallback(() => {
     if (!unlockTool) return;
-    if (unlockViaPoints(TOOL_COSTS[unlockTool])) {
+    if (unlockViaPoints(unlockTool, TOOL_COSTS[unlockTool])) {
       setLiveBalance(getPointsBalance());
       applyToolUnlock(unlockTool);
     } else {
@@ -155,6 +157,11 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
   if (!puzzle) return null;
 
   const zoom = ZOOM_STEPS[zoomIdx];
+  // Current points cost for each tool, escalated by how many times it's
+  // already been points-bought (see toolUnlock.js's getToolCost) — always
+  // computed fresh at render time, not cached, so a purchase's price bump
+  // shows up immediately on the very next render.
+  const liveCost = (key) => getToolCost(TOOL_COSTS[key], key);
   const TOOL_DISABLED = {
     magnifier: won,
     rootCause: won || filledOrder.length < 2,
@@ -247,7 +254,7 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
                 >
                   <Icon size={18} />
                   <span style={styles.toolLabel}>{copy.short}</span>
-                  <span style={styles.toolCost}>{TOOL_COSTS[key]}</span>
+                  <span style={styles.toolCost}>{liveCost(key)}</span>
                 </button>
               );
             })}
@@ -261,9 +268,14 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
             <Undo2 size={16} />
             <span>{t.undo}</span>
           </button>
-          <button onClick={restart} style={styles.bottomBtn} disabled={filledOrder.length === 0 || won}>
+          <button
+            onClick={onRestart || restart}
+            style={styles.bottomBtn}
+            disabled={filledOrder.length === 0 || won || restartsRemaining === 0}
+            title={restartsRemaining != null ? t.retryRemaining(restartsRemaining) : undefined}
+          >
             <RotateCcw size={16} />
-            <span>{t.retry}</span>
+            <span>{restartsRemaining != null ? `${t.retry} (${restartsRemaining})` : t.retry}</span>
           </button>
         </div>
       )}
@@ -272,7 +284,7 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
         <ToolUnlockSheet
           open={unlockTool != null}
           title={unlockTool ? t.tools[unlockTool].title : ""}
-          cost={unlockTool ? TOOL_COSTS[unlockTool] : 0}
+          cost={unlockTool ? liveCost(unlockTool) : 0}
           pointsBalance={liveBalance}
           error={unlockError}
           labels={{ watchAd: t.watchAd, spendPoints: t.spendPointsBtn, cancel: t.cancelBtn, balance: t.balanceLabel }}

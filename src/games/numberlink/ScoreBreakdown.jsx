@@ -8,7 +8,12 @@
 // this run earned has just been credited via addPoints, v3.1 §一), renders
 // a second line with the running wallet total so the credit is visible at
 // the moment it happens, not just later on Home.
-export default function ScoreBreakdown({ score, labels, pointsBalance }) {
+//
+// `compact` (v3.3): skips the itemized rule breakdown line ("完成 +10 ·
+// 速度 +10 · ...") — regular-level feedback asked for this to be dropped so
+// the win card doesn't read as a rules dump; total + wallet balance still
+// show.
+export default function ScoreBreakdown({ score, labels, pointsBalance, compact = false }) {
   if (!score) return null;
   const { total, breakdown } = score;
   const parts = [
@@ -22,7 +27,7 @@ export default function ScoreBreakdown({ score, labels, pointsBalance }) {
   return (
     <div style={styles.wrap}>
       <div style={styles.total}>{labels.total} {total}</div>
-      <div style={styles.parts}>{parts.join(" · ")}</div>
+      {!compact && <div style={styles.parts}>{parts.join(" · ")}</div>}
       {pointsBalance != null && labels.balance && (
         <div style={styles.balanceLine}>{labels.balance(total, pointsBalance)}</div>
       )}

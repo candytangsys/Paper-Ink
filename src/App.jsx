@@ -20,7 +20,11 @@ const LOADING_FADE_MS = 260;
 
 export default function App() {
   const [route, setRoute] = useState(() => routeFromHash(window.location.hash));
-  const [bootPhase, setBootPhase] = useState("loading"); // 'loading' | 'exiting' | 'ready'
+  // v3.3: the splash no longer dismisses itself on a timer once its
+  // min-display/fonts-ready gate passes — it waits at 'readyToEnter' with
+  // an Enter button (LoadingScreen.jsx) until the player taps it, then
+  // proceeds through the same 'exiting' fade as before.
+  const [bootPhase, setBootPhase] = useState("loading"); // 'loading' | 'readyToEnter' | 'exiting' | 'ready'
 
   useEffect(() => {
     captureShareVisit();
@@ -36,11 +40,15 @@ export default function App() {
         : Promise.resolve();
     const capped = Promise.race([fontsReady, new Promise((resolve) => setTimeout(resolve, LOADING_CAP_MS))]);
     Promise.all([minWait, capped]).then(() => {
-      if (!cancelled) setBootPhase("exiting");
+      if (!cancelled) setBootPhase("readyToEnter");
     });
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  const handleEnter = useCallback(() => {
+    setBootPhase((phase) => (phase === "readyToEnter" ? "exiting" : phase));
   }, []);
 
   useEffect(() => {
@@ -70,7 +78,13 @@ export default function App() {
       {route.kind === "history" && <HistoryPage onExit={() => navigate(null)} />}
       {route.kind === "rules" && <RulesPage onExit={() => navigate(null)} />}
       <InstallBanner />
-      {bootPhase !== "ready" && <LoadingScreen exiting={bootPhase === "exiting"} />}
+      {bootPhase !== "ready" && (
+        <LoadingScreen
+          exiting={bootPhase === "exiting"}
+          readyToEnter={bootPhase === "readyToEnter"}
+          onEnter={handleEnter}
+        />
+      )}
     </LanguageProvider>
   );
 }

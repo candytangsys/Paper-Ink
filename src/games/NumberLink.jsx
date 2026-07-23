@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, RotateCcw, Timer, Feather } from "lucide-react";
+import { ArrowLeft, RotateCcw, Timer, Feather, Share2 } from "lucide-react";
 import { inkWashStyle } from "../theme.jsx";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "../components/LangToggle.jsx";
@@ -7,9 +7,10 @@ import PlayArea from "./numberlink/PlayArea.jsx";
 import OnboardingIntro from "./numberlink/OnboardingIntro.jsx";
 import { useGameSession } from "./numberlink/useGameSession.js";
 import ScoreBreakdown from "./numberlink/ScoreBreakdown.jsx";
+import { shareLevel } from "./numberlink/levelShareFlow.js";
 import { fmtTime } from "../engine/share.mjs";
 import { generateHamiltonianPath, pickClueIndices, hasDiagonalStep } from "../engine/hamiltonian.mjs";
-import { CHAPTERS, CONTROLS_HIDDEN_SIZES, DIAGONAL_FORCED_SIZES, clueRatioForClear, nextChapterSize } from "../engine/chapters.mjs";
+import { CHAPTERS, DIAGONAL_FORCED_SIZES, clueRatioForClear, nextChapterSize } from "../engine/chapters.mjs";
 import { parTimeSec, computeScore } from "../engine/score.mjs";
 import { getChapterEntry, isChapterUnlocked, recordChapterClear, willHitMilestoneOnNextClear } from "../chapterProgress.js";
 import { recordLevelHistoryEntry } from "../levelHistory.js";
@@ -42,6 +43,8 @@ const TEXT = {
     scoreMilestone: "里程碑",
     scoreTotal: "本關積分",
     scoreBalance: (gain, balance) => `本關 +${gain} 分，目前總分 ${balance}`,
+    share: "分享成績",
+    shared: "已複製到剪貼簿",
   },
   en: {
     level: (n) => `Level ${n}`,
@@ -66,6 +69,8 @@ const TEXT = {
     scoreMilestone: "Milestone",
     scoreTotal: "Score",
     scoreBalance: (gain, balance) => `+${gain} this level, ${balance} total`,
+    share: "Share result",
+    shared: "Copied to clipboard",
   },
 };
 
@@ -128,7 +133,13 @@ export default function NumberLink({ onExit, initialSize = null }) {
   const [lastScore, setLastScore] = useState(null);
   const [pointsBalance, setPointsBalance] = useState(null);
   const [justUnlocked, setJustUnlocked] = useState(null);
-  const [showIntro, setShowIntro] = useState(() => !hasSeenIntro());
+  // Bug fix: this used to show once ever regardless of chapter, which meant
+  // an experienced player deep-linking into a large chapter on a device/
+  // browser that never happened to set the "seen" flag would get the
+  // "tap 1 to start" walkthrough on an 8×8 board. Scope it to the smallest
+  // chapter's first few clears instead — that's the only place it's ever
+  // actually relevant, and it still only shows once (via markIntroSeen()).
+  const [introDismissed, setIntroDismissed] = useState(() => hasSeenIntro());
 
   // Metadata about the puzzle currently in play, needed at win time to
   // compute par time (par depends on the clue ratio actually used).
@@ -213,8 +224,9 @@ export default function NumberLink({ onExit, initialSize = null }) {
 
   const dismissIntro = useCallback(() => {
     markIntroSeen();
-    setShowIntro(false);
+    setIntroDismissed(true);
   }, []);
+  const showIntro = !introDismissed && chapterSize === CHAPTERS[0] && chapterClearCount < 3;
 
   if (!loaded) {
     return (
@@ -241,6 +253,7 @@ export default function NumberLink({ onExit, initialSize = null }) {
         onNextLevel={() => startChapterLevel(chapterSize)}
         onReplay={session.restart}
         t={t}
+        lang={lang}
       />
       {showIntro && <OnboardingIntro onDismiss={dismissIntro} />}
     </div>
@@ -251,12 +264,36 @@ export default function NumberLink({ onExit, initialSize = null }) {
 
 function GameScreen({
   chapterSize, chapterClearCount, bestScore, lastScore, pointsBalance, justUnlocked,
-  session, onRegenerate, onBack, onNextLevel, onReplay, t,
+  session, onRegenerate, onBack, onNextLevel, onReplay, t, lang,
 }) {
   const { puzzle, taps, mistakes, elapsed, won } = session;
+  const [toast, setToast] = useState(null);
+  const toastTimeout = useRef(null);
+
+  const handleShare = useCallback(async () => {
+    const result = await shareLevel({
+      size: chapterSize, level: chapterClearCount + 1, timeSec: elapsed, perfect: mistakes === 0, lang,
+    });
+    if (result.method === "clipboard") {
+      if (toastTimeout.current) clearTimeout(toastTimeout.current);
+      setToast(t.shared);
+      toastTimeout.current = setTimeout(() => setToast(null), 2600);
+    }
+  }, [chapterSize, chapterClearCount, elapsed, mistakes, lang, t.shared]);
+
+  useEffect(() => () => {
+    if (toastTimeout.current) clearTimeout(toastTimeout.current);
+  }, []);
+
   if (!puzzle) return null;
   const nextNum = session.filledOrder.length + 1;
-  const showTools = !CONTROLS_HIDDEN_SIZES.has(chapterSize);
+  // Bug fix: every chapter now shows the full control surface (rails +
+  // bottom row). This used to be gated off for the smallest chapters
+  // (CONTROLS_HIDDEN_SIZES, a "learn bare mechanics first" holdover from
+  // before the onboarding walkthrough existed) — but the walkthrough now
+  // teaches 回退/重來/the tool rail up front, on exactly the chapter that
+  // was hiding them, which just left those buttons missing where the
+  // tutorial had just told the player to expect them.
   const displayLevel = chapterClearCount + 1;
 
   return (
@@ -280,7 +317,7 @@ function GameScreen({
         <StatPill label={t.mistakes(mistakes)} warn={mistakes > 0} />
       </div>
 
-      <PlayArea session={session} showTools={showTools} toolContext="tutorial" />
+      <PlayArea session={session} toolContext="tutorial" />
 
       {won && (
         <div style={styles.winOverlay}>
@@ -293,6 +330,7 @@ function GameScreen({
             <ScoreBreakdown
               score={lastScore}
               pointsBalance={pointsBalance}
+              compact
               labels={{
                 base: t.scoreBase, time: t.scoreTime, accuracy: t.scoreAccuracy,
                 noHint: t.scoreNoHint, milestone: t.scoreMilestone, total: t.scoreTotal,
@@ -309,9 +347,15 @@ function GameScreen({
                 {t.nextLevel}
               </button>
             </div>
+            <button onClick={handleShare} style={styles.shareLink}>
+              <Share2 size={12} />
+              <span>{t.share}</span>
+            </button>
           </div>
         </div>
       )}
+
+      {toast && <div style={styles.toast}>{toast}</div>}
     </div>
   );
 }
@@ -491,5 +535,35 @@ const styles = {
     fontFamily: "'Noto Serif TC', serif",
     letterSpacing: 2,
     cursor: "pointer",
+  },
+  // Small, secondary — share is a promo nudge here, not the main action
+  // (that's playAgain/nextLevel above it).
+  shareLink: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    margin: "14px auto 0",
+    padding: "5px 10px",
+    background: "transparent",
+    border: "none",
+    color: "#8B8478",
+    fontSize: 11.5,
+    fontFamily: "'EB Garamond', serif",
+    letterSpacing: 0.5,
+    cursor: "pointer",
+  },
+  toast: {
+    position: "fixed",
+    bottom: 28,
+    left: "50%",
+    transform: "translateX(-50%)",
+    background: "#2B2A28",
+    color: "#EAE2CF",
+    padding: "10px 20px",
+    borderRadius: 999,
+    fontSize: 13,
+    letterSpacing: 1,
+    zIndex: 20,
   },
 };

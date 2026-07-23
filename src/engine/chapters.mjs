@@ -22,10 +22,6 @@ export const CHAPTERS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16];
 // the difficulty floor). Suggested default from the spec, adjustable.
 export const CHAPTER_MILESTONE = 10;
 
-// Chapters where undo/hint stay hidden, translated from the old
-// CONTROLS_UNLOCK_LEVEL=7 cutoff (which covered levels on sizes 2 and 3).
-export const CONTROLS_HIDDEN_SIZES = new Set([2, 3]);
-
 // Chapters whose puzzles must require at least one diagonal step, translated
 // from the old DIAGONAL_FORCED_LEVELS={2,3} (both size-3 levels).
 export const DIAGONAL_FORCED_SIZES = new Set([3]);

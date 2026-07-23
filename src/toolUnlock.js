@@ -19,6 +19,52 @@ export function unlockViaAd(confirmMessage) {
   return window.confirm(confirmMessage);
 }
 
-export function unlockViaPoints(cost) {
-  return spendPoints(cost);
+// v3.4: repeatedly buying the *same* tool with points makes its next
+// point-purchase cost more (+20% of its base cost per prior purchase,
+// per tool — buying 放大鏡 a lot doesn't raise 溯源符's price). Nudges
+// players toward spreading spend across tools or watching an ad
+// occasionally instead of point-buying one favorite tool indefinitely at a
+// flat price. Watching an ad is unaffected — always free, no scaling.
+const PURCHASE_KEY = "tool_purchase_counts_v1";
+const COST_GROWTH_PER_PURCHASE = 0.2;
+
+function loadPurchaseCounts() {
+  try {
+    return JSON.parse(localStorage.getItem(PURCHASE_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function savePurchaseCounts(counts) {
+  try {
+    localStorage.setItem(PURCHASE_KEY, JSON.stringify(counts));
+  } catch {
+    /* storage unavailable, ignore */
+  }
+}
+
+export function getToolPurchaseCount(toolKey) {
+  return loadPurchaseCounts()[toolKey] || 0;
+}
+
+// The price a player would pay *right now* to points-unlock `toolKey`,
+// given how many times they've already bought it. Callers should always
+// display and spend this value, never the raw base cost.
+export function getToolCost(baseCost, toolKey) {
+  const count = getToolPurchaseCount(toolKey);
+  return Math.round(baseCost * (1 + COST_GROWTH_PER_PURCHASE * count));
+}
+
+// Spends the current (already-escalated) cost for `toolKey` and, on
+// success, bumps its purchase count so the *next* purchase costs more.
+export function unlockViaPoints(toolKey, baseCost) {
+  const cost = getToolCost(baseCost, toolKey);
+  const success = spendPoints(cost);
+  if (success) {
+    const counts = loadPurchaseCounts();
+    counts[toolKey] = (counts[toolKey] || 0) + 1;
+    savePurchaseCounts(counts);
+  }
+  return success;
 }

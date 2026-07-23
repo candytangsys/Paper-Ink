@@ -4,6 +4,7 @@ import { useLanguage } from "../i18n.jsx";
 import LangToggle from "./LangToggle.jsx";
 import { CHAPTER_MILESTONE } from "../engine/chapters.mjs";
 import { MAGNIFIER_COST, ROOT_CAUSE_COST, RELAY_COST, PREVIEW_COST, FREEZE_COST } from "../toolUnlock.js";
+import { DAILY_BASE_REWARD, DAILY_STREAK_BONUS_PER_DAY, DAILY_STREAK_BONUS_CAP } from "../engine/dailyReward.mjs";
 
 const TEXT = {
   zh: {
@@ -29,11 +30,8 @@ const TEXT = {
       {
         heading: "積分規則",
         body: [
-          "每次完成一關都會計分並存入積分：基礎分 +10。",
-          "速度：時間在標準時間 70% 內 +10、100% 內 +5，超時則無加分。",
-          "準確度：零失誤 +5、1-2 次失誤 +2、3 次以上無加分。",
-          "無提示：全程未使用任何道具（含自動提示）+5。",
-          "里程碑：同一大關卡每累積 10 次通關 +30。",
+          "常規關卡：每次完成都會依表現計分並存入積分——基礎分 +10；速度（標準時間 70% 內 +10、100% 內 +5）；準確度（零失誤 +5、1-2 次失誤 +2）；無提示（全程未使用任何道具，含自動提示，+5）；里程碑（同一大關卡每累積 10 次通關 +30）。",
+          `每日挑戰：完成當天題目固定獲得 ${DAILY_BASE_REWARD} 積分，並依目前連續天數增加——每多一天連續紀錄 +${DAILY_STREAK_BONUS_PER_DAY} 積分，最多額外 +${DAILY_STREAK_BONUS_CAP} 分。重點在養成習慣、堅持越久獎勵越多，不在比較單次表現。`,
           "積分可在道具解鎖時花費，或直接累積查看成長。",
         ],
       },
@@ -41,12 +39,13 @@ const TEXT = {
         heading: "道具一覽",
         body: [
           "提示：免費、自動——停下來幾秒後系統會自動標出下一步，不用按任何按鈕。",
-          `放大鏡（${MAGNIFIER_COST} 積分）：查看盤面上任一格的正確數字。`,
-          `溯源符（${ROOT_CAUSE_COST} 積分）：找出目前走法最後一個仍可解開的步驟。`,
-          `接力筆（${RELAY_COST} 積分）：直接幫你畫出下一步，是唯一會自動前進的道具。`,
-          `引路符（${PREVIEW_COST} 積分）：預覽接下來 3 步的走向（不顯示數字）。`,
-          `靜心符（${FREEZE_COST} 積分）：立即減少 15 秒已耗費時間，幫助達成速度加分。`,
+          `放大鏡（起價 ${MAGNIFIER_COST} 積分）：查看盤面上任一格的正確數字。`,
+          `溯源符（起價 ${ROOT_CAUSE_COST} 積分）：找出目前走法最後一個仍可解開的步驟。`,
+          `接力筆（起價 ${RELAY_COST} 積分）：直接幫你畫出下一步，是唯一會自動前進的道具。`,
+          `引路符（起價 ${PREVIEW_COST} 積分）：預覽接下來 3 步的走向（不顯示數字）。`,
+          `靜心符（起價 ${FREEZE_COST} 積分）：立即減少 15 秒已耗費時間，幫助達成速度加分。`,
           "以上道具皆可花積分或看一段短片解鎖；使用任一種都會讓「無提示」加分失效。",
+          "同一種道具用積分連續購買會愈來愈貴（每次 +20%）；看廣告解鎖則不受影響，價格永遠不變。",
         ],
       },
       {
@@ -80,11 +79,8 @@ const TEXT = {
       {
         heading: "Scoring",
         body: [
-          "Every clear earns points: base +10.",
-          "Speed: +10 within 70% of par time, +5 within 100%, no bonus over par.",
-          "Accuracy: +5 for zero mistakes, +2 for 1-2 mistakes, no bonus for 3+.",
-          "No-hint: +5 if no tool (including the automatic hint) was used at all.",
-          "Milestone: +30 every 10th clear within the same chapter.",
+          "Regular levels: every clear earns points based on performance — base +10; speed (+10 within 70% of par time, +5 within 100%); accuracy (+5 for zero mistakes, +2 for 1-2); no-hint (+5 if no tool, including the automatic hint, was used); milestone (+30 every 10th clear within the same chapter).",
+          `Daily Challenge: ${DAILY_BASE_REWARD} points for finishing the day's puzzle, plus a bonus that grows with your current streak — +${DAILY_STREAK_BONUS_PER_DAY} per additional streak day, up to +${DAILY_STREAK_BONUS_CAP} extra. Rewards the habit and sticking with it, not any single day's result.`,
           "Points can be spent unlocking tools, or simply watched grow over time.",
         ],
       },
@@ -92,12 +88,13 @@ const TEXT = {
         heading: "Tools",
         body: [
           "Hint: free and automatic — auto-marks your next move a few seconds after you pause, no button needed.",
-          `Magnifier (${MAGNIFIER_COST} pts): reveal the correct number for any cell on the board.`,
-          `Root Cause (${ROOT_CAUSE_COST} pts): find the last step in your current path that's still solvable.`,
-          `Relay Brush (${RELAY_COST} pts): places the next correct cell for you — the only tool that actually advances the path.`,
-          `Guide Talisman (${PREVIEW_COST} pts): preview the next 3 cells in sequence (no numbers shown).`,
-          `Stillness Talisman (${FREEZE_COST} pts): instantly refunds 15s off your counted time, helping the speed bonus.`,
+          `Magnifier (from ${MAGNIFIER_COST} pts): reveal the correct number for any cell on the board.`,
+          `Root Cause (from ${ROOT_CAUSE_COST} pts): find the last step in your current path that's still solvable.`,
+          `Relay Brush (from ${RELAY_COST} pts): places the next correct cell for you — the only tool that actually advances the path.`,
+          `Guide Talisman (from ${PREVIEW_COST} pts): preview the next 3 cells in sequence (no numbers shown).`,
+          `Stillness Talisman (from ${FREEZE_COST} pts): instantly refunds 15s off your counted time, helping the speed bonus.`,
           "Every tool above can be unlocked with points or by watching a short ad; using any of them forfeits the no-hint bonus.",
+          "Buying the same tool with points repeatedly makes it pricier each time (+20% per purchase); watching an ad instead is unaffected — always the same price.",
         ],
       },
       {
