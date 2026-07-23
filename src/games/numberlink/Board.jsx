@@ -9,12 +9,16 @@ import { inkTrailColor } from "../../theme.jsx";
 --------------------------------------------------------- */
 
 export function boardMetrics(n) {
+  // n=16 (the Sunday board) is the one size that can't fit a ≥32px touch
+  // target inside a 375px-wide screen (16 * 32 = 512px alone exceeds that),
+  // so it intentionally grows past the viewport and relies on the
+  // scrollable wrapper + drag auto-scroll in Board to stay reachable.
   const cellSize =
     n <= 4 ? 62 : n <= 6 ? 50 : n <= 7 ? 42 : n <= 8 ? 38 : n <= 9 ? 34 :
-    n <= 10 ? 30 : n <= 12 ? 25 : n <= 14 ? 21 : 18;
-  const gap = n <= 8 ? 5 : n <= 12 ? 3 : 2;
-  const pad = n <= 8 ? 12 : n <= 12 ? 9 : 7;
-  const fontSize = n <= 6 ? 18 : n <= 8 ? 15 : n <= 10 ? 13 : n <= 12 ? 11 : 9.5;
+    n <= 10 ? 30 : n <= 12 ? 25 : n <= 14 ? 21 : 32;
+  const gap = n <= 8 ? 5 : n <= 12 ? 3 : n <= 14 ? 2 : 3;
+  const pad = n <= 8 ? 12 : n <= 12 ? 9 : n <= 14 ? 7 : 10;
+  const fontSize = n <= 6 ? 18 : n <= 8 ? 15 : n <= 10 ? 13 : n <= 12 ? 11 : n <= 14 ? 9.5 : 14;
   const boardPx = pad * 2 + n * cellSize + (n - 1) * gap;
   return { cellSize, gap, pad, fontSize, boardPx };
 }
@@ -48,6 +52,7 @@ export default function Board({
   });
 
   const boardRef = useRef(null);
+  const scrollWrapRef = useRef(null);
   const lastKeyRef = useRef(null);
   const onCellClickRef = useRef(onCellClick);
   const wonRef = useRef(won);
@@ -60,6 +65,14 @@ export default function Board({
   useEffect(() => {
     wonRef.current = won;
   }, [won]);
+
+  // When the board is wider than its scrollable viewport (only n=16 today),
+  // start centered rather than pinned to the left edge.
+  useEffect(() => {
+    const wrap = scrollWrapRef.current;
+    if (!wrap) return;
+    wrap.scrollLeft = Math.max(0, (boardPx - wrap.clientWidth) / 2);
+  }, [n, boardPx]);
 
   const cellAtLocal = useCallback(
     (x, y) => {
@@ -110,6 +123,21 @@ export default function Board({
           onCellClickRef.current(cell.row, cell.col);
         }
       }
+
+      // Boards too wide for their viewport (n=16) auto-pan while dragging
+      // near an edge, so a finger held down can still reach off-screen
+      // cells without the user having to let go and scroll manually.
+      const wrap = scrollWrapRef.current;
+      if (wrap && wrap.scrollWidth > wrap.clientWidth) {
+        const wrapRect = wrap.getBoundingClientRect();
+        const edge = 36;
+        const speed = 16;
+        if (e.clientX < wrapRect.left + edge) {
+          wrap.scrollLeft = Math.max(0, wrap.scrollLeft - speed);
+        } else if (e.clientX > wrapRect.right - edge) {
+          wrap.scrollLeft = Math.min(wrap.scrollWidth - wrap.clientWidth, wrap.scrollLeft + speed);
+        }
+      }
     };
     const onUp = () => {
       setDragging(false);
@@ -129,6 +157,13 @@ export default function Board({
 
   return (
     <div
+      ref={scrollWrapRef}
+      style={{
+        ...styles.scrollWrap,
+        padding: `0 calc((100% - ${boardPx}px) / 2)`,
+      }}
+    >
+    <div
       ref={boardRef}
       onPointerDown={handlePointerDown}
       style={{
@@ -139,7 +174,11 @@ export default function Board({
         padding: PAD,
         gridTemplateColumns: `repeat(${n}, ${cellSize}px)`,
         gridTemplateRows: `repeat(${n}, ${cellSize}px)`,
-        touchAction: "none",
+        // "none" only lives on each cell button below; the grid background
+        // itself allows horizontal panning so oversized boards (n=16) can
+        // still be scrolled by touch when the finger lands on the gap/pad
+        // margin rather than a cell.
+        touchAction: "pan-x",
         userSelect: "none",
         WebkitUserSelect: "none",
       }}
@@ -266,10 +305,19 @@ export default function Board({
         })
       )}
     </div>
+    </div>
   );
 }
 
 const styles = {
+  scrollWrap: {
+    width: "100%",
+    overflowX: "auto",
+    overflowY: "visible",
+    WebkitOverflowScrolling: "touch",
+    marginBottom: 24,
+    boxSizing: "border-box",
+  },
   board: {
     position: "relative",
     boxSizing: "border-box",
@@ -280,7 +328,6 @@ const styles = {
     background: "#EAE2CF",
     border: "1px solid rgba(43,42,40,0.14)",
     boxShadow: "0 2px 24px rgba(43,42,40,0.10), inset 0 0 0 1px rgba(243,238,225,0.6)",
-    marginBottom: 24,
   },
   lineLayer: {
     position: "absolute",
