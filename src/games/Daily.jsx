@@ -6,7 +6,7 @@ import LangToggle from "../components/LangToggle.jsx";
 import Board from "./numberlink/Board.jsx";
 import { useGameSession } from "./numberlink/useGameSession.js";
 import { buildDailyPuzzle } from "../engine/daily.mjs";
-import { fmtTime } from "../engine/share.mjs";
+import { fmtTime, buildDailyAnalyticsParams } from "../engine/share.mjs";
 import { createStreakStore } from "../engine/streak.mjs";
 import { getDailyEntry, recordDailyCompletion } from "../dailyHistory.js";
 import { todayUTCString } from "../dateUtil.js";
@@ -120,14 +120,14 @@ export default function Daily({ date, onExit }) {
         setStreakStatus(status);
         trackShareConversion(date);
       }
-      track("daily_complete", {
+      track("daily_complete", buildDailyAnalyticsParams(date, {
         date,
         size: puzzle.n,
         time_sec: timeSec,
         mistakes,
         perfect,
         streak: status ? status.streak : 0,
-      });
+      }));
       recordLevelCompletion();
     },
     [date, isToday, puzzle, streakStatus, streakStore]
@@ -170,7 +170,7 @@ export default function Daily({ date, onExit }) {
   useEffect(() => {
     if (!puzzle || openedRef.current === date) return;
     openedRef.current = date;
-    track("daily_open", { date, size: puzzle.n });
+    track("daily_open", buildDailyAnalyticsParams(date, { date, size: puzzle.n }));
     if (!historyEntry) session.start(puzzle);
     // historyEntry is only read here to decide whether to (re)start a
     // session; it intentionally isn't a dependency so completing the

@@ -94,7 +94,7 @@ export default function Home({ onSelect }) {
       <LangToggle />
       <div style={styles.topbar}>
         <div style={styles.brandmark}>
-          <div style={styles.sealDot}>紙</div>
+          <div style={styles.sealDot}>筆</div>
           <span style={styles.brandName}>{t.brand}</span>
         </div>
         <div style={styles.streakChip}>

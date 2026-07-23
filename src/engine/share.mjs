@@ -34,3 +34,20 @@ export function buildShareUrl({ baseUrl, date, refId }) {
   u.searchParams.set("ref", refId);
   return u.toString();
 }
+
+// Placeholder until the real launch date is locked in — update this one
+// constant when it is. Not shown to players anywhere (see buildDailyAnalyticsParams
+// below): day_index is a backend-only analytics dimension now, not UI copy.
+export const DAILY_EPOCH = "2026-08-01";
+
+export function dailyNumber(dateStr, epoch = DAILY_EPOCH) {
+  return Math.round((new Date(dateStr) - new Date(epoch)) / 86400000) + 1;
+}
+
+// Every daily_open/daily_complete analytics call should carry day_index so
+// the backend dashboard can slice by "day N of the challenge" — funnels
+// itself through this one function so day_index can never accidentally end
+// up wired into a player-visible string instead of a track() call.
+export function buildDailyAnalyticsParams(date, extra = {}) {
+  return { ...extra, day_index: dailyNumber(date) };
+}

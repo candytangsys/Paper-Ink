@@ -1,5 +1,36 @@
 # CHANGELOG
 
+## v1.10 — Seal-mark character decided: 紙 → 筆
+
+Closes the one open item v1.7 left pending.
+
+### Changed
+
+- **`Home.jsx`'s `sealDot`** now reads "筆" instead of "紙" — per your ruling. Only the one character in Home's brandmark; nothing else referenced it.
+
+### Verification
+
+- `npm test` — 33/33 passing (unaffected, no logic touched).
+- `npm run build` — succeeds.
+
+---
+
+## v1.9 — Daily day-index restored as a backend-only analytics dimension
+
+Follow-up to v1.8's removal of the `#N` day counter: the product decision was refined from "delete it" to "keep computing it, just never show it to players" — the number is genuinely useful for the backend dashboard to slice daily-challenge funnels by "day N since launch," it just shouldn't have been player-facing UI copy in the first place.
+
+### Added
+
+- **`day_index` on `daily_open` / `daily_complete`.** `src/engine/share.mjs` regains `dailyNumber(dateStr, epoch)`, now sourced from an exported `DAILY_EPOCH` constant (still the `2026-08-01` placeholder — swap that one line for the real launch date pre-launch) instead of a hardcoded default buried in the function signature. A new `buildDailyAnalyticsParams(date, extra)` wraps it (`{ ...extra, day_index: dailyNumber(date) }`) so day_index can only ever reach analytics, never a rendered string — `Daily.jsx`'s two `track(...)` calls now go through it exclusively; nothing else in the app imports `dailyNumber` at all.
+
+### Verification
+
+- `npm test` — 33/33 passing. New coverage: `dailyNumber`/`buildDailyAnalyticsParams` behavior (`test/share.test.mjs`), plus a dedicated `test/daily-number-hidden.test.mjs` that source-scans `Daily.jsx`, `Home.jsx`, and `shareImage.js` to pin down that `day_index`/`dailyNumber` never appears anywhere outside a `track(...)` call, and that every player-visible daily-title/share-card string is a plain, digit-free literal.
+- `npm run build` — succeeds.
+- Manually verified in headless Chromium (Playwright), reading the dev-mode `[analytics]` console mirror: `daily_open` fires with `day_index: -9` (expected pre-launch, same epoch math as before) while the on-screen title still reads plain "每日挑戰" — confirms the split between backend data and player copy actually holds at runtime, not just in source.
+
+---
+
 ## v1.8 — Hint correctness, same-puzzle retry, daily-number cleanup
 
 Four issues from playtesting, all traced to root cause before fixing.
