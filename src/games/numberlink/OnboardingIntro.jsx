@@ -164,8 +164,8 @@ const UNDO_FRAMES = [
 // exact prompt/buttons players will actually see instead of just describing
 // them in the caption.
 const STUCK_FRAMES = [
-  { filledCount: 2, showBanner: false, ms: 1200 },
-  { filledCount: 2, showBanner: true, ms: 2400 },
+  { filledCount: 2, showBanner: false, ms: 800 },
+  { filledCount: 2, showBanner: true, ms: 1000 },
   { filledCount: 0, showBanner: false, ms: 500 },
   { filledCount: 1, showBanner: false, ms: 220 },
   { filledCount: 2, showBanner: false, ms: 220 },
@@ -179,7 +179,7 @@ const TOOLS_FRAMES = [
   { visible: 2, ms: 150 },
   { visible: 3, ms: 150 },
   { visible: 4, ms: 150 },
-  { visible: 5, ms: 1000 },
+  { visible: 5, ms: 2000 },
 ];
 
 function ConnectDemo({ reduced }) {
