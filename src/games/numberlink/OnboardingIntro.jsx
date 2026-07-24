@@ -141,42 +141,42 @@ function MiniGrid({ filledCount, ringIndex, hintIndex, celebrate }) {
 }
 
 const CONNECT_FRAMES = [
-  { filledCount: 0, ringIndex: 0, ms: 900 },
-  { filledCount: 1, ringIndex: 1, ms: 900 },
-  { filledCount: 2, ringIndex: 2, ms: 900 },
-  { filledCount: 3, ringIndex: 3, ms: 900 },
-  { filledCount: 4, ringIndex: null, celebrate: true, ms: 1800 },
+  { filledCount: 0, ringIndex: 0, ms: 550 },
+  { filledCount: 1, ringIndex: 1, ms: 550 },
+  { filledCount: 2, ringIndex: 2, ms: 550 },
+  { filledCount: 3, ringIndex: 3, ms: 550 },
+  { filledCount: 4, ringIndex: null, celebrate: true, ms: 1000 },
 ];
 
 const UNDO_FRAMES = [
-  { filledCount: 3, icon: null, ms: 1000 },
-  { filledCount: 3, icon: "undo", ms: 700 },
-  { filledCount: 2, icon: null, ms: 900 },
-  { filledCount: 2, icon: "retry", ms: 700 },
-  { filledCount: 0, icon: null, ms: 700 },
-  { filledCount: 1, icon: null, ms: 220 },
-  { filledCount: 2, icon: null, ms: 220 },
-  { filledCount: 3, icon: null, ms: 220 },
+  { filledCount: 3, icon: null, ms: 600 },
+  { filledCount: 3, icon: "undo", ms: 450 },
+  { filledCount: 2, icon: null, ms: 550 },
+  { filledCount: 2, icon: "retry", ms: 450 },
+  { filledCount: 0, icon: null, ms: 450 },
+  { filledCount: 1, icon: null, ms: 150 },
+  { filledCount: 2, icon: null, ms: 150 },
+  { filledCount: 3, icon: null, ms: 150 },
 ];
 
 const HINT_FRAMES = [
-  { filledCount: 2, hintIndex: null, ms: 1200 },
-  { filledCount: 2, hintIndex: 2, ms: 1400 },
-  { filledCount: 3, hintIndex: null, ms: 900 },
-  { filledCount: 0, hintIndex: null, ms: 300 },
-  { filledCount: 1, hintIndex: null, ms: 220 },
-  { filledCount: 2, hintIndex: null, ms: 220 },
+  { filledCount: 2, hintIndex: null, ms: 700 },
+  { filledCount: 2, hintIndex: 2, ms: 800 },
+  { filledCount: 3, hintIndex: null, ms: 550 },
+  { filledCount: 0, hintIndex: null, ms: 200 },
+  { filledCount: 1, hintIndex: null, ms: 150 },
+  { filledCount: 2, hintIndex: null, ms: 150 },
 ];
 
 const TOOL_KEYS = ["magnifier", "rootCause", "relay", "preview", "freeze"];
 const TOOL_ICONS = { magnifier: Search, rootCause: Crosshair, relay: Wand2, preview: Route, freeze: Snowflake };
 const TOOLS_FRAMES = [
-  { visible: 0, ms: 300 },
-  { visible: 1, ms: 250 },
-  { visible: 2, ms: 250 },
-  { visible: 3, ms: 250 },
-  { visible: 4, ms: 250 },
-  { visible: 5, ms: 1800 },
+  { visible: 0, ms: 180 },
+  { visible: 1, ms: 150 },
+  { visible: 2, ms: 150 },
+  { visible: 3, ms: 150 },
+  { visible: 4, ms: 150 },
+  { visible: 5, ms: 1000 },
 ];
 
 function ConnectDemo({ reduced }) {

@@ -6,6 +6,7 @@ import HistoryPage from "./components/HistoryPage.jsx";
 import RulesPage from "./components/RulesPage.jsx";
 import CalendarPage from "./components/CalendarPage.jsx";
 import InstallBanner from "./components/InstallBanner.jsx";
+import ConsentBanner from "./components/ConsentBanner.jsx";
 import LoadingScreen from "./components/LoadingScreen.jsx";
 import { GlobalInkStyle } from "./theme.jsx";
 import { LanguageProvider } from "./i18n.jsx";
@@ -82,6 +83,7 @@ export default function App() {
         <CalendarPage onExit={() => navigate(null)} onSelectDate={(date) => navigate("daily", date)} />
       )}
       <InstallBanner />
+      <ConsentBanner />
       {bootPhase !== "ready" && (
         <LoadingScreen
           exiting={bootPhase === "exiting"}

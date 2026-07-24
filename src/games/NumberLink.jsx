@@ -14,6 +14,7 @@ import { CHAPTERS, DIAGONAL_FORCED_SIZES, clueRatioForClear, nextChapterSize } f
 import { parTimeSec, computeScore } from "../engine/score.mjs";
 import { getChapterEntry, isChapterUnlocked, recordChapterClear, willHitMilestoneOnNextClear } from "../chapterProgress.js";
 import { recordLevelHistoryEntry } from "../levelHistory.js";
+import { maybeShowInterstitial } from "../interstitialAd.js";
 import { track } from "../analytics.js";
 import { recordLevelCompletion } from "../pwaInstall.js";
 import { addPoints } from "../pointsWallet.js";
@@ -180,6 +181,15 @@ export default function NumberLink({ onExit, initialSize = null }) {
     });
     track("tutorial_level_complete", {
       size, clear_count: newCount, time_sec: finalTime, mistakes: finalMistakes, score: score.total,
+    });
+    // Interstitial mount point (RD 指令 v1.0 §三之2): every small-level
+    // clear is a candidate opportunity, including chapter-transition
+    // clears — maybeShowInterstitial's own frequency cap decides whether
+    // this particular one actually fires.
+    maybeShowInterstitial({
+      trigger: confirmedMilestone ? "chapter_transition" : "level_complete",
+      size,
+      clearCount: newCount,
     });
     recordLevelCompletion();
     setChapterClearCount(newCount);
