@@ -36,6 +36,7 @@ const TEXT = {
     nextLevel: "下一關",
     loading: "研墨中…",
     unlocked: (size) => `🎉 解鎖新章節：${size} × ${size}`,
+    tryNextChapter: (size) => `直接挑戰 ${size} × ${size} 新章節`,
     scoreBase: "完成",
     scoreTime: "速度",
     scoreAccuracy: "準確度",
@@ -61,6 +62,7 @@ const TEXT = {
     nextLevel: "Next level",
     loading: "Grinding ink…",
     unlocked: (size) => `🎉 New chapter unlocked: ${size} × ${size}`,
+    tryNextChapter: (size) => `Jump into the ${size} × ${size} chapter`,
     scoreBase: "Complete",
     scoreTime: "Speed",
     scoreAccuracy: "Accuracy",
@@ -253,6 +255,7 @@ export default function NumberLink({ onExit, initialSize = null }) {
         session={session}
         onBack={onExit}
         onNextLevel={() => startChapterLevel(chapterSize)}
+        onNextChapter={justUnlocked != null ? () => startChapterLevel(justUnlocked) : null}
         onReplay={session.restart}
         t={t}
         lang={lang}
@@ -266,7 +269,7 @@ export default function NumberLink({ onExit, initialSize = null }) {
 
 function GameScreen({
   chapterSize, chapterClearCount, bestScore, lastScore, pointsBalance, justUnlocked,
-  session, onBack, onNextLevel, onReplay, t, lang,
+  session, onBack, onNextLevel, onNextChapter, onReplay, t, lang,
 }) {
   const { puzzle, taps, mistakes, elapsed, won } = session;
   const [toast, setToast] = useState(null);
@@ -338,7 +341,14 @@ function GameScreen({
               }}
             />
             {bestScore != null && <div style={styles.winBest}>{t.bestScore(bestScore)}</div>}
-            {justUnlocked != null && <div style={styles.unlockBanner}>{t.unlocked(justUnlocked)}</div>}
+            {justUnlocked != null && (
+              <>
+                <div style={styles.unlockBanner}>{t.unlocked(justUnlocked)}</div>
+                <button onClick={onNextChapter} style={styles.winBtnChapter}>
+                  {t.tryNextChapter(justUnlocked)}
+                </button>
+              </>
+            )}
             <div style={styles.winActions}>
               <button onClick={onReplay} style={styles.winBtnGhost}>
                 {t.playAgain}
@@ -506,6 +516,20 @@ const styles = {
     color: "#6E8E86",
     fontFamily: "'Noto Serif TC', serif",
     letterSpacing: 1,
+  },
+  winBtnChapter: {
+    marginTop: 10,
+    width: "100%",
+    padding: "10px 0",
+    borderRadius: 4,
+    border: "1px solid #6E8E86",
+    background: "transparent",
+    color: "#6E8E86",
+    fontWeight: 600,
+    fontSize: 13,
+    fontFamily: "'Noto Serif TC', serif",
+    letterSpacing: 1.5,
+    cursor: "pointer",
   },
   winActions: {
     display: "flex",
