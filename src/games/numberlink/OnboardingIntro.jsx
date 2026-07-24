@@ -18,8 +18,8 @@ import { inkTrailColor } from "../../theme.jsx";
    step animates a live-looking miniature board (same
    boardMetrics()/inkTrailColor() the real board uses) acting
    out the mechanic being explained — connecting cells, undo/
-   retry, the idle auto-hint, and the tool rail — on a loop, with
-   only a short caption per step instead of a paragraph.
+   retry, the real stuck banner, and the tool rail — on a loop,
+   with only a short caption per step instead of a paragraph.
 --------------------------------------------------------- */
 
 // Demo path for the mini 2×2 board: (0,0)→(0,1)→(1,0)→(1,1), i.e. right,
@@ -70,7 +70,7 @@ function useLoopingFrames(frames, enabled) {
 
 // The animated 2×2 board shared by the "connect", "undo/retry", and
 // "auto-hint" steps — only the frame script driving it differs.
-function MiniGrid({ filledCount, ringIndex, hintIndex, celebrate }) {
+function MiniGrid({ filledCount, ringIndex, celebrate }) {
   const { cellSize, gap, pad, boardPx } = boardMetrics(2);
   const centerOf = (idx) => {
     const [r, c] = NODE_CELLS[idx];
@@ -101,12 +101,11 @@ function MiniGrid({ filledCount, ringIndex, hintIndex, celebrate }) {
       {NODE_CELLS.map((cell, idx) => {
         const filled = idx < filledCount;
         const isRing = ringIndex === idx;
-        const isHint = hintIndex === idx;
         const { x, y } = centerOf(idx);
         return (
           <div
             key={idx}
-            className={isRing || isHint ? "ink-pulse" : ""}
+            className={isRing ? "ink-pulse" : ""}
             style={{
               position: "absolute",
               left: x - cellSize / 2,
@@ -120,9 +119,9 @@ function MiniGrid({ filledCount, ringIndex, hintIndex, celebrate }) {
               fontFamily: "'EB Garamond', 'Noto Serif TC', serif",
               fontWeight: 600,
               fontSize: 18,
-              background: isHint ? "rgba(184,146,90,0.18)" : filled ? inkTrailColor(idx / 3) : "#EBE3D0",
-              color: isHint ? "#8B6A32" : filled ? "#F3EEE1" : "#B7AC96",
-              border: isHint ? "2px solid #B8925A" : filled ? "1px solid rgba(243,238,225,0.55)" : "1px solid rgba(43,42,40,0.16)",
+              background: filled ? inkTrailColor(idx / 3) : "#EBE3D0",
+              color: filled ? "#F3EEE1" : "#B7AC96",
+              border: filled ? "1px solid rgba(243,238,225,0.55)" : "1px solid rgba(43,42,40,0.16)",
               boxShadow: isRing ? "0 0 0 4px rgba(178,58,46,0.35)" : "none",
               transition: "background 0.35s ease, color 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease",
             }}
@@ -159,13 +158,17 @@ const UNDO_FRAMES = [
   { filledCount: 3, icon: null, ms: 150 },
 ];
 
-const HINT_FRAMES = [
-  { filledCount: 2, hintIndex: null, ms: 700 },
-  { filledCount: 2, hintIndex: 2, ms: 800 },
-  { filledCount: 3, hintIndex: null, ms: 550 },
-  { filledCount: 0, hintIndex: null, ms: 200 },
-  { filledCount: 1, hintIndex: null, ms: 150 },
-  { filledCount: 2, hintIndex: null, ms: 150 },
+// Mirrors the real in-game stuck banner (PlayArea.jsx's stuckBanner, shown
+// when stuckBannerVisible flips true after a few idle seconds on a dead
+// path) rather than an abstract hint animation, so the tutorial shows the
+// exact prompt/buttons players will actually see instead of just describing
+// them in the caption.
+const STUCK_FRAMES = [
+  { filledCount: 2, showBanner: false, ms: 1200 },
+  { filledCount: 2, showBanner: true, ms: 2400 },
+  { filledCount: 0, showBanner: false, ms: 500 },
+  { filledCount: 1, showBanner: false, ms: 220 },
+  { filledCount: 2, showBanner: false, ms: 220 },
 ];
 
 const TOOL_KEYS = ["magnifier", "rootCause", "relay", "preview", "freeze"];
@@ -203,9 +206,30 @@ function UndoDemo({ reduced, t }) {
   );
 }
 
-function HintDemo({ reduced }) {
-  const f = useLoopingFrames(HINT_FRAMES, !reduced);
-  return <MiniGrid filledCount={f.filledCount} hintIndex={f.hintIndex} />;
+// Shows the actual in-game stuck banner (same copy/buttons as PlayArea.jsx's
+// stuckBanner) fading in over the frozen mini board, rather than an abstract
+// hint animation, so this step demonstrates the real prompt players will hit.
+function StuckDemo({ reduced, t }) {
+  const f = useLoopingFrames(STUCK_FRAMES, !reduced);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+      <MiniGrid filledCount={f.filledCount} />
+      <div
+        style={{
+          ...styles.miniStuckBanner,
+          opacity: f.showBanner ? 1 : 0,
+          transform: f.showBanner ? "translateY(0)" : "translateY(-4px)",
+        }}
+      >
+        <span>{t.stuckPrompt}</span>
+        <div style={styles.miniStuckActions}>
+          <span style={styles.miniStuckBtn}>{t.useTool}</span>
+          <span style={styles.miniStuckBtn}>{t.undo}</span>
+          <span style={styles.miniStuckBtnGhost}>{t.dismiss}</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ToolsDemo({ reduced }) {
@@ -251,7 +275,14 @@ const TEXT = {
     steps: [
       { title: "① 連線", caption: "依序點擊數字 1 → N，可上下左右斜角八個方向移動；按住拖曳能一筆畫完。" },
       { title: "② 回退與重來", caption: "點錯了嗎？回退可收回一步；重來能清空重新挑戰同一題。", undo: "回退", retry: "重來" },
-      { title: "③ 卡關提醒", caption: "如果走法已經卡死，停頓幾秒後系統會提醒你，說明可能需要回退或重來一次。" },
+      {
+        title: "③ 卡關提醒",
+        caption: "如果走法已經卡死，停頓幾秒後系統會提醒你，說明可能需要回退或重來一次。",
+        stuckPrompt: "目前走法已經卡住了，建議回退或重來一次",
+        useTool: "使用道具",
+        undo: "回退",
+        dismiss: "忽略",
+      },
       { title: "④ 道具與積分", caption: "完成關卡會累積積分，右側 5 種道具可用積分或看廣告解鎖，助你度過難關。" },
     ],
     prev: "上一步",
@@ -264,7 +295,14 @@ const TEXT = {
     steps: [
       { title: "① Connect", caption: "Tap numbers 1 → N in order — 8-directional moves including diagonals. Press and hold to draw the whole stroke." },
       { title: "② Undo & Retry", caption: "Tapped the wrong cell? Undo takes back one step; Retry clears the board and restarts the same puzzle.", undo: "Undo", retry: "Retry" },
-      { title: "③ Stuck Reminder", caption: "Hit a dead end? After a short pause the game lets you know — it may be time to undo or retry." },
+      {
+        title: "③ Stuck Reminder",
+        caption: "Hit a dead end? After a short pause the game lets you know — it may be time to undo or retry.",
+        stuckPrompt: "This path is stuck — try undo or retry",
+        useTool: "Use tool",
+        undo: "Undo",
+        dismiss: "Dismiss",
+      },
       { title: "④ Tools & Points", caption: "Clearing puzzles earns points. 5 tools on the right can be unlocked with points or a quick ad when you need help." },
     ],
     prev: "Back",
@@ -295,7 +333,7 @@ export default function OnboardingIntro({ onDismiss }) {
         <div style={styles.demoStage}>
           {step === 0 && <ConnectDemo reduced={reduced} />}
           {step === 1 && <UndoDemo reduced={reduced} t={stepData} />}
-          {step === 2 && <HintDemo reduced={reduced} />}
+          {step === 2 && <StuckDemo reduced={reduced} t={stepData} />}
           {step === 3 && <ToolsDemo reduced={reduced} />}
         </div>
 
@@ -382,6 +420,46 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     pointerEvents: "none",
+  },
+  miniStuckBanner: {
+    padding: "10px 14px",
+    borderRadius: 4,
+    background: "rgba(184,146,90,0.12)",
+    border: "1px solid rgba(184,146,90,0.4)",
+    fontSize: 11.5,
+    color: "#8B6A32",
+    fontFamily: "'Noto Serif TC', serif",
+    letterSpacing: 0.5,
+    textAlign: "center",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 7,
+    maxWidth: 240,
+    transition: "opacity 0.3s ease, transform 0.3s ease",
+  },
+  miniStuckActions: {
+    display: "flex",
+    gap: 6,
+  },
+  miniStuckBtn: {
+    background: "#B8925A",
+    color: "#F3EEE1",
+    borderRadius: 4,
+    padding: "5px 10px",
+    fontSize: 10.5,
+    fontFamily: "'Noto Serif TC', serif",
+    letterSpacing: 0.5,
+  },
+  miniStuckBtnGhost: {
+    background: "transparent",
+    color: "#8B6A32",
+    border: "1px solid rgba(139,106,50,0.4)",
+    borderRadius: 4,
+    padding: "5px 10px",
+    fontSize: 10.5,
+    fontFamily: "'Noto Serif TC', serif",
+    letterSpacing: 0.5,
   },
   iconRow: {
     display: "flex",
