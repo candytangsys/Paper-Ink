@@ -10,7 +10,7 @@ import ScoreBreakdown from "./numberlink/ScoreBreakdown.jsx";
 import { shareLevel } from "./numberlink/levelShareFlow.js";
 import { fmtTime } from "../engine/share.mjs";
 import { generateHamiltonianPath, pickClueIndices, hasDiagonalStep } from "../engine/hamiltonian.mjs";
-import { CHAPTERS, DIAGONAL_FORCED_SIZES, clueRatioForClear, nextChapterSize } from "../engine/chapters.mjs";
+import { CHAPTERS, CHAPTER_MILESTONE, DIAGONAL_FORCED_SIZES, clueRatioForClear, nextChapterSize } from "../engine/chapters.mjs";
 import { parTimeSec, computeScore } from "../engine/score.mjs";
 import { getChapterEntry, isChapterUnlocked, recordChapterClear, willHitMilestoneOnNextClear } from "../chapterProgress.js";
 import { recordLevelHistoryEntry } from "../levelHistory.js";
@@ -171,7 +171,12 @@ export default function NumberLink({ onExit, initialSize = null }) {
     const score = computeScore({
       timeSec: finalTime, parTimeSec: par, mistakes: finalMistakes, usedTool, justHitMilestone,
     });
-    const { chapterClearCount: newCount, justHitMilestone: confirmedMilestone } = recordChapterClear(size, score.total);
+    const { chapterClearCount: newCount } = recordChapterClear(size, score.total);
+    // Chapter-unlock event (7 clears) is independent of the score-bonus
+    // milestone (every 10 clears, see justHitMilestone above) — conflating
+    // the two used to delay the "next chapter unlocked" prompt until the
+    // 10th clear even though isChapterUnlocked() already flips at the 7th.
+    const chapterJustUnlocked = newCount === CHAPTER_MILESTONE;
     recordLevelHistoryEntry({
       size,
       chapterClearIndex: newCount,
@@ -189,7 +194,7 @@ export default function NumberLink({ onExit, initialSize = null }) {
     // clears — maybeShowInterstitial's own frequency cap decides whether
     // this particular one actually fires.
     maybeShowInterstitial({
-      trigger: confirmedMilestone ? "chapter_transition" : "level_complete",
+      trigger: chapterJustUnlocked ? "chapter_transition" : "level_complete",
       size,
       clearCount: newCount,
     });
@@ -198,7 +203,7 @@ export default function NumberLink({ onExit, initialSize = null }) {
     setLastScore(score);
     setPointsBalance(addPoints(score.total));
     setBestScore((prev) => (prev == null ? score.total : Math.max(prev, score.total)));
-    const next = confirmedMilestone ? nextChapterSize(size) : null;
+    const next = chapterJustUnlocked ? nextChapterSize(size) : null;
     setJustUnlocked(next);
   }, []);
 
