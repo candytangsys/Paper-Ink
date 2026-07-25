@@ -70,3 +70,13 @@ export function maybeShowInterstitial(context = {}) {
   });
   return shouldShow;
 }
+
+// For trigger sources that already own their *own* frequency logic (e.g.
+// undoRestartAdCounter.js's every-5th-click counter) and just need the
+// actual "show it" step — consent-gated, but without maybeShowInterstitial's
+// unrelated free-window/per-clear-interval/cooldown gates layered on top.
+export function showInterstitialIfConsented(context = {}) {
+  if (!consentAllowsAds()) return false;
+  interstitialProvider(context);
+  return true;
+}

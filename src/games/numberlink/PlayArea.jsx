@@ -1,30 +1,41 @@
 import { useState, useEffect, useCallback } from "react";
-import { Undo2, RotateCcw, Search, Crosshair, Wand2, Route, Snowflake, Coins } from "lucide-react";
+import { Undo2, RotateCcw, Search, Crosshair, Wand2, Route, Snowflake, Hammer, Coins } from "lucide-react";
 import { useLanguage } from "../../i18n.jsx";
 import Board from "./Board.jsx";
 import ToolUnlockSheet from "./ToolUnlockSheet.jsx";
 import { getPointsBalance } from "../../pointsWallet.js";
 import {
-  MAGNIFIER_COST, ROOT_CAUSE_COST, RELAY_COST, PREVIEW_COST, FREEZE_COST,
-  unlockViaAd, unlockViaPoints, getToolCost,
+  MAGNIFIER_COST, ROOT_CAUSE_COST, RELAY_COST, PREVIEW_COST, FREEZE_COST, HAMMER_COST,
+  unlockViaAd, unlockViaPoints, getToolCost, getToolPurchaseCount,
+  canResetEscalation, getResetEscalationCost, resetEscalationViaAd, resetEscalationViaPoints,
+  isToolUnlockedAtChapterIndex,
 } from "../../toolUnlock.js";
+import { hasSeenToolIntro, markToolIntroSeen } from "../../toolIntroSeen.js";
+import { bumpUndoRestartUsage } from "../../undoRestartAdCounter.js";
+import { showInterstitialIfConsented } from "../../interstitialAd.js";
 import { track } from "../../analytics.js";
 import { isDesktopViewport } from "../../deviceUtil.js";
 
 /* ---------------------------------------------------------
    Shared in-game play surface (v3.2): left rail (points),
    board column (start hint / stuck banner / Board), right
-   rail (5 paid tools), bottom row (回退/重來). One
+   rail (6 paid tools), bottom row (回退/重來). One
    implementation for both NumberLink.jsx and Daily.jsx so the
    two never drift apart again — Daily was the layout baseline.
 
+   v3.6: tools now unlock progressively by chapter progress
+   (unlockedChapterIndex), 錘子 (hammer) joins the tool rail,
+   root-cause surfaces which step to rewind to, a faint ghost
+   of the pre-undo/retry path is shown until the level is won,
+   and every 5th 回退/重來 click is an interstitial-ad beat.
+
    Owns all tool-unlock UI state itself; callers just hand it
-   the session from useGameSession() plus two small flags.
+   the session from useGameSession() plus a few small flags.
 --------------------------------------------------------- */
 
-const TOOL_ORDER = ["magnifier", "rootCause", "relay", "preview", "freeze"];
-const TOOL_ICONS = { magnifier: Search, rootCause: Crosshair, relay: Wand2, preview: Route, freeze: Snowflake };
-const TOOL_COSTS = { magnifier: MAGNIFIER_COST, rootCause: ROOT_CAUSE_COST, relay: RELAY_COST, preview: PREVIEW_COST, freeze: FREEZE_COST };
+const TOOL_ORDER = ["freeze", "magnifier", "preview", "rootCause", "hammer", "relay"];
+const TOOL_ICONS = { freeze: Snowflake, magnifier: Search, preview: Route, rootCause: Crosshair, hammer: Hammer, relay: Wand2 };
+const TOOL_COSTS = { magnifier: MAGNIFIER_COST, rootCause: ROOT_CAUSE_COST, relay: RELAY_COST, preview: PREVIEW_COST, freeze: FREEZE_COST, hammer: HAMMER_COST };
 
 const TEXT = {
   zh: {
@@ -41,12 +52,43 @@ const TEXT = {
     spendPointsBtn: (cost) => `花費 ${cost} 積分解鎖`,
     balanceLabel: (bal) => `目前積分 ${bal}`,
     insufficientPoints: "積分不足",
+    rootCauseSuggest: (n) => `溯源符：建議回到第 ${n} 步重新開始`,
+    lockedTitle: (chapterLabel) => `${chapterLabel} 章節解鎖`,
+    resetLabel: "已連續購買，價格已上漲",
+    resetWatchAd: "看廣告重置價格",
+    resetSpendPoints: (cost) => `花費 ${cost} 積分重置價格`,
+    hammerHint: "點擊盤面上任一固定數字，將它移除",
     tools: {
-      magnifier: { name: "放大鏡", short: "放大鏡", title: "解鎖放大鏡", ad: "觀看一段小短片以解鎖放大鏡？（P0 暫以此對話框代替廣告）" },
-      rootCause: { name: "溯源符", short: "溯源符", title: "解鎖溯源符", ad: "觀看一段小短片以解鎖溯源符？（P0 暫以此對話框代替廣告）" },
-      relay: { name: "接力筆", short: "接力筆", title: "解鎖接力筆", ad: "觀看一段小短片以解鎖接力筆？（P0 暫以此對話框代替廣告）" },
-      preview: { name: "引路符", short: "引路符", title: "解鎖引路符", ad: "觀看一段小短片以解鎖引路符？（P0 暫以此對話框代替廣告）" },
-      freeze: { name: "靜心符", short: "靜心符", title: "解鎖靜心符", ad: "觀看一段小短片以解鎖靜心符？（P0 暫以此對話框代替廣告）" },
+      magnifier: {
+        name: "放大鏡", short: "放大鏡", title: "解鎖放大鏡",
+        ad: "觀看一段小短片以解鎖放大鏡？（P0 暫以此對話框代替廣告）",
+        intro: "查看盤面上任一格的正確數字。",
+      },
+      rootCause: {
+        name: "溯源符", short: "溯源符", title: "解鎖溯源符",
+        ad: "觀看一段小短片以解鎖溯源符？（P0 暫以此對話框代替廣告）",
+        intro: "找出目前走法最後一個仍可解開的步驟，並建議回到第幾步。",
+      },
+      relay: {
+        name: "接力筆", short: "接力筆", title: "解鎖接力筆",
+        ad: "觀看一段小短片以解鎖接力筆？（P0 暫以此對話框代替廣告）",
+        intro: "直接幫你畫出下一步，是唯一會自動前進的道具。",
+      },
+      preview: {
+        name: "引路符", short: "引路符", title: "解鎖引路符",
+        ad: "觀看一段小短片以解鎖引路符？（P0 暫以此對話框代替廣告）",
+        intro: "預覽接下來 3 步的走向（不顯示數字）。",
+      },
+      freeze: {
+        name: "靜心符", short: "靜心符", title: "解鎖靜心符",
+        ad: "觀看一段小短片以解鎖靜心符？（P0 暫以此對話框代替廣告）",
+        intro: "立即減少 15 秒已耗費時間，幫助達成速度加分。",
+      },
+      hammer: {
+        name: "錘子", short: "錘子", title: "解鎖錘子",
+        ad: "觀看一段小短片以解鎖錘子？（P0 暫以此對話框代替廣告）",
+        intro: "移除盤面上一個固定數字，讓你自己安排怎麼連過去。",
+      },
     },
   },
   en: {
@@ -63,29 +105,68 @@ const TEXT = {
     spendPointsBtn: (cost) => `Spend ${cost} points`,
     balanceLabel: (bal) => `${bal} points available`,
     insufficientPoints: "Not enough points",
+    rootCauseSuggest: (n) => `Root Cause: rewind to step ${n} and restart from there`,
+    lockedTitle: (chapterLabel) => `Unlocks in the ${chapterLabel} chapter`,
+    resetLabel: "Price has climbed from repeat purchases",
+    resetWatchAd: "Watch ad to reset price",
+    resetSpendPoints: (cost) => `Spend ${cost} points to reset price`,
+    hammerHint: "Tap any fixed number on the board to remove it",
     tools: {
-      magnifier: { name: "Magnifier", short: "Magnify", title: "Unlock Magnifier", ad: "Watch a short clip to unlock the magnifier? (P0 stand-in for the rewarded ad)" },
-      rootCause: { name: "Root Cause", short: "Root Cause", title: "Unlock Root Cause", ad: "Watch a short clip to unlock root cause? (P0 stand-in for the rewarded ad)" },
-      relay: { name: "Relay Brush", short: "Relay", title: "Unlock Relay Brush", ad: "Watch a short clip to unlock the relay brush? (P0 stand-in for the rewarded ad)" },
-      preview: { name: "Guide Talisman", short: "Guide", title: "Unlock Guide Talisman", ad: "Watch a short clip to unlock the guide talisman? (P0 stand-in for the rewarded ad)" },
-      freeze: { name: "Stillness Talisman", short: "Stillness", title: "Unlock Stillness Talisman", ad: "Watch a short clip to unlock the stillness talisman? (P0 stand-in for the rewarded ad)" },
+      magnifier: {
+        name: "Magnifier", short: "Magnify", title: "Unlock Magnifier",
+        ad: "Watch a short clip to unlock the magnifier? (P0 stand-in for the rewarded ad)",
+        intro: "Reveal the correct number for any cell on the board.",
+      },
+      rootCause: {
+        name: "Root Cause", short: "Root Cause", title: "Unlock Root Cause",
+        ad: "Watch a short clip to unlock root cause? (P0 stand-in for the rewarded ad)",
+        intro: "Finds the last still-solvable step in your path, and suggests which step to rewind to.",
+      },
+      relay: {
+        name: "Relay Brush", short: "Relay", title: "Unlock Relay Brush",
+        ad: "Watch a short clip to unlock the relay brush? (P0 stand-in for the rewarded ad)",
+        intro: "Places the next correct cell for you — the only tool that advances the path.",
+      },
+      preview: {
+        name: "Guide Talisman", short: "Guide", title: "Unlock Guide Talisman",
+        ad: "Watch a short clip to unlock the guide talisman? (P0 stand-in for the rewarded ad)",
+        intro: "Preview the next 3 cells in sequence (no numbers shown).",
+      },
+      freeze: {
+        name: "Stillness Talisman", short: "Stillness", title: "Unlock Stillness Talisman",
+        ad: "Watch a short clip to unlock the stillness talisman? (P0 stand-in for the rewarded ad)",
+        intro: "Instantly refunds 15s off your counted time, helping the speed bonus.",
+      },
+      hammer: {
+        name: "Hammer", short: "Hammer", title: "Unlock Hammer",
+        ad: "Watch a short clip to unlock the hammer? (P0 stand-in for the rewarded ad)",
+        intro: "Removes one of the board's fixed numbers, freeing you to route through it yourself.",
+      },
     },
   },
 };
 
-export default function PlayArea({ session, showTools = true, toolContext = "tutorial", onRestart, restartsRemaining = null }) {
+export default function PlayArea({
+  session, showTools = true, toolContext = "tutorial", onRestart, restartsRemaining = null,
+  unlockedChapterIndex = Infinity, chapterUnlockLabel,
+}) {
   const { lang } = useLanguage();
   const t = TEXT[lang];
   const {
     puzzle, filledOrder, filledSet, candidateSet, won,
-    shakeKey, revealedCell, rootCause, previewCells, stuckBannerVisible,
-    advanceTo, undo, restart, revealCell, traceRootCause, placeNextCell, previewPath, freezeTime, dismissStuckBanner,
+    shakeKey, revealedCell, rootCause, previewCells, stuckBannerVisible, previousPath,
+    advanceTo, undo, restart, revealCell, traceRootCause, placeNextCell, previewPath, freezeTime, hammerClue, dismissStuckBanner,
   } = session;
 
   const [magnifierMode, setMagnifierMode] = useState(false);
+  const [hammerMode, setHammerMode] = useState(false);
   const [unlockTool, setUnlockTool] = useState(null); // one of TOOL_ORDER | null
   const [unlockError, setUnlockError] = useState(null);
   const [liveBalance, setLiveBalance] = useState(() => getPointsBalance());
+  // Bumped whenever a tool-intro bubble is dismissed, just to force this
+  // component to re-check hasSeenToolIntro() (which reads localStorage, not
+  // React state) on the next render.
+  const [, setIntroSeenTick] = useState(0);
 
   // Re-read the wallet balance fresh each time the picker opens rather than
   // trusting the useState initializer's one-time snapshot (points may have
@@ -107,6 +188,7 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
       else if (toolKey === "relay") placeNextCell();
       else if (toolKey === "preview") previewPath();
       else if (toolKey === "freeze") freezeTime();
+      else if (toolKey === "hammer") setHammerMode(true);
       closeUnlockSheet();
     },
     [toolContext, traceRootCause, placeNextCell, previewPath, freezeTime, closeUnlockSheet]
@@ -127,6 +209,23 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
     }
   }, [unlockTool, applyToolUnlock, t]);
 
+  // v3.6: once a tool's point-price has escalated from repeat purchases,
+  // offer a way to clear that markup on demand (watch an ad, or pay a steep
+  // multiple of the current price) instead of only ever waiting it out.
+  const handleResetViaAd = useCallback(() => {
+    if (!unlockTool) return;
+    if (resetEscalationViaAd(t.tools[unlockTool].ad, unlockTool)) setLiveBalance(getPointsBalance());
+  }, [unlockTool, t]);
+
+  const handleResetViaPoints = useCallback(() => {
+    if (!unlockTool) return;
+    if (resetEscalationViaPoints(unlockTool, TOOL_COSTS[unlockTool])) {
+      setLiveBalance(getPointsBalance());
+    } else {
+      setUnlockError(t.insufficientPoints);
+    }
+  }, [unlockTool, t]);
+
   // Ctrl+Z / Cmd+Z undo, desktop-only (≥769px) — centralized here since
   // 回退 now lives in PlayArea for both screens instead of being
   // duplicated per screen.
@@ -139,11 +238,34 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
       if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
       if (filledOrder.length === 0 || won) return;
       e.preventDefault();
-      undo();
+      handleUndoClick();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showTools, filledOrder.length, won, undo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showTools, filledOrder.length, won]);
+
+  // Shared "every 5th 回退/重來 click, regardless of which button" ad beat
+  // (v3.6) — deliberately independent of interstitialAd.js's own per-clear
+  // frequency cap, since this trigger has its own counter.
+  const bumpAndMaybeShowAd = useCallback(() => {
+    if (bumpUndoRestartUsage()) showInterstitialIfConsented({ trigger: "undo_restart" });
+  }, []);
+
+  const handleUndoClick = useCallback(() => {
+    undo();
+    bumpAndMaybeShowAd();
+  }, [undo, bumpAndMaybeShowAd]);
+
+  const handleRestartClick = useCallback(() => {
+    (onRestart || restart)();
+    bumpAndMaybeShowAd();
+  }, [onRestart, restart, bumpAndMaybeShowAd]);
+
+  const dismissToolIntro = useCallback((toolKey) => {
+    markToolIntroSeen(toolKey);
+    setIntroSeenTick((v) => v + 1);
+  }, []);
 
   if (!puzzle) return null;
 
@@ -161,7 +283,31 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
     relay: won || stuckBannerVisible || filledOrder.length >= puzzle.total,
     preview: won,
     freeze: won,
+    hammer: won,
   };
+  const TOOL_LOCKED = {};
+  TOOL_ORDER.forEach((key) => {
+    TOOL_LOCKED[key] = !isToolUnlockedAtChapterIndex(key, unlockedChapterIndex);
+  });
+  const rootCauseUnlocked = !TOOL_LOCKED.rootCause;
+
+  const openUnlockSheet = (key) => {
+    if (TOOL_LOCKED[key]) return;
+    setUnlockTool(key);
+  };
+
+  const purchaseCount = unlockTool ? getToolPurchaseCount(unlockTool) : 0;
+  const resetInfo =
+    unlockTool && canResetEscalation(unlockTool)
+      ? {
+          label: t.resetLabel,
+          cost: getResetEscalationCost(TOOL_COSTS[unlockTool], unlockTool),
+          watchAdLabel: t.resetWatchAd,
+          spendPointsLabel: t.resetSpendPoints,
+          onWatchAd: handleResetViaAd,
+          onSpendPoints: handleResetViaPoints,
+        }
+      : null;
 
   return (
     <>
@@ -177,15 +323,25 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
 
         <div style={styles.boardColumn}>
           {filledOrder.length === 0 && !won && <div style={styles.startHint}>{t.startHint}</div>}
+          {showTools && hammerMode && <div style={styles.hammerHint}>{t.hammerHint}</div>}
           {showTools && stuckBannerVisible && (
             <div style={styles.stuckBanner}>
               <span>{t.stuckPrompt}</span>
               <div style={styles.stuckActions}>
-                <button onClick={() => setUnlockTool("rootCause")} style={styles.stuckBtn}>{t.useToolBtn}</button>
-                <button onClick={undo} style={styles.stuckBtn}>{t.undo}</button>
+                {rootCauseUnlocked && (
+                  <button onClick={() => openUnlockSheet("rootCause")} style={styles.stuckBtn}>{t.useToolBtn}</button>
+                )}
+                <button onClick={handleUndoClick} style={styles.stuckBtn}>{t.undo}</button>
                 <button onClick={dismissStuckBanner} style={styles.stuckBtnGhost}>{t.dismissBtn}</button>
               </div>
             </div>
+          )}
+          {/* 溯源符 (v3.6): now names the exact step to rewind to, instead of
+              only marking the suggested next cell on the board. The free
+              stuck banner above stays deliberately vague ("it's stuck") —
+              this detail is the paid tool's payoff. */}
+          {showTools && rootCause && (
+            <div style={styles.rootCauseCaption}>{t.rootCauseSuggest(rootCause.lastGoodStep)}</div>
           )}
 
           <Board
@@ -204,6 +360,11 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
               revealCell(r, c);
               setMagnifierMode(false);
             }}
+            previousPath={showTools ? previousPath : undefined}
+            hammerMode={showTools && hammerMode}
+            onHammerTap={(r, c) => {
+              if (hammerClue(r, c)) setHammerMode(false);
+            }}
           />
         </div>
 
@@ -212,19 +373,47 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
             {TOOL_ORDER.map((key) => {
               const Icon = TOOL_ICONS[key];
               const copy = t.tools[key];
-              const active = key === "magnifier" && magnifierMode;
+              const active = (key === "magnifier" && magnifierMode) || (key === "hammer" && hammerMode);
+              const locked = TOOL_LOCKED[key];
+              const showIntro = !locked && !hasSeenToolIntro(key);
               return (
-                <button
-                  key={key}
-                  onClick={() => (key === "magnifier" && magnifierMode ? setMagnifierMode(false) : setUnlockTool(key))}
-                  disabled={TOOL_DISABLED[key]}
-                  style={{ ...styles.toolBtn, ...(active ? styles.toolBtnActive : {}) }}
-                  title={copy.name}
-                >
-                  <Icon size={18} />
-                  <span style={styles.toolLabel}>{copy.short}</span>
-                  <span style={styles.toolCost}>{liveCost(key)}</span>
-                </button>
+                <div key={key} style={styles.toolSlot}>
+                  <button
+                    onClick={() => {
+                      if (locked) return;
+                      if (key === "magnifier" && magnifierMode) setMagnifierMode(false);
+                      else if (key === "hammer" && hammerMode) setHammerMode(false);
+                      else openUnlockSheet(key);
+                      if (showIntro) dismissToolIntro(key);
+                    }}
+                    disabled={locked || TOOL_DISABLED[key]}
+                    style={{
+                      ...styles.toolBtn,
+                      ...(active ? styles.toolBtnActive : {}),
+                      ...(locked ? styles.toolBtnLocked : {}),
+                    }}
+                    title={locked ? t.lockedTitle(chapterUnlockLabel ? chapterUnlockLabel(key) : "") : copy.name}
+                  >
+                    <Icon size={18} />
+                    <span style={styles.toolLabel}>{copy.short}</span>
+                    {!locked && <span style={styles.toolCost}>{liveCost(key)}</span>}
+                  </button>
+                  {showIntro && (
+                    <div style={styles.toolIntroBubble}>
+                      <span>{copy.intro}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          dismissToolIntro(key);
+                        }}
+                        style={styles.toolIntroClose}
+                        aria-label={t.dismissBtn}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -233,12 +422,12 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
 
       {showTools && (
         <div style={styles.bottomRow}>
-          <button onClick={undo} style={styles.bottomBtn} disabled={filledOrder.length === 0 || won} title={`${t.undo} (Ctrl+Z)`}>
+          <button onClick={handleUndoClick} style={styles.bottomBtn} disabled={filledOrder.length === 0 || won} title={`${t.undo} (Ctrl+Z)`}>
             <Undo2 size={16} />
             <span>{t.undo}</span>
           </button>
           <button
-            onClick={onRestart || restart}
+            onClick={handleRestartClick}
             style={styles.bottomBtn}
             disabled={filledOrder.length === 0 || won || restartsRemaining === 0}
             title={restartsRemaining != null ? t.retryRemaining(restartsRemaining) : undefined}
@@ -260,6 +449,7 @@ export default function PlayArea({ session, showTools = true, toolContext = "tut
           onWatchAd={handleWatchAd}
           onSpendPoints={handleSpendPoints}
           onCancel={closeUnlockSheet}
+          resetInfo={resetInfo}
         />
       )}
     </>
@@ -292,6 +482,10 @@ const styles = {
     gap: 8,
     paddingTop: 4,
   },
+  toolSlot: {
+    position: "relative",
+    width: "100%",
+  },
   pointsChip: {
     display: "flex",
     flexDirection: "column",
@@ -322,6 +516,14 @@ const styles = {
     letterSpacing: 1,
     textAlign: "center",
   },
+  hammerHint: {
+    marginBottom: 12,
+    fontSize: 12.5,
+    color: "#8B6A32",
+    fontFamily: "'Noto Serif TC', serif",
+    letterSpacing: 1,
+    textAlign: "center",
+  },
   stuckBanner: {
     marginBottom: 16,
     padding: "10px 14px",
@@ -337,6 +539,18 @@ const styles = {
     flexDirection: "column",
     alignItems: "center",
     gap: 8,
+  },
+  rootCauseCaption: {
+    marginBottom: 16,
+    padding: "8px 14px",
+    borderRadius: 4,
+    background: "rgba(178,58,46,0.08)",
+    border: "1px solid rgba(178,58,46,0.3)",
+    fontSize: 12.5,
+    color: "#B23A2E",
+    fontFamily: "'Noto Serif TC', serif",
+    letterSpacing: 1,
+    textAlign: "center",
   },
   stuckActions: {
     display: "flex",
@@ -383,6 +597,10 @@ const styles = {
     borderColor: "#B8925A",
     color: "#F3EEE1",
   },
+  toolBtnLocked: {
+    opacity: 0.45,
+    cursor: "not-allowed",
+  },
   toolLabel: {
     fontSize: 9.5,
     fontFamily: "'Noto Serif TC', serif",
@@ -395,6 +613,34 @@ const styles = {
     fontFamily: "'EB Garamond', serif",
     color: "#B8925A",
     fontWeight: 700,
+  },
+  toolIntroBubble: {
+    position: "absolute",
+    top: 0,
+    right: "100%",
+    marginRight: 8,
+    width: 150,
+    background: "#2B2A28",
+    color: "#F3EEE1",
+    borderRadius: 6,
+    padding: "8px 10px",
+    fontSize: 11,
+    lineHeight: 1.4,
+    fontFamily: "'Noto Serif TC', serif",
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 6,
+    zIndex: 5,
+    boxShadow: "0 8px 20px rgba(43,42,40,0.3)",
+  },
+  toolIntroClose: {
+    background: "transparent",
+    border: "none",
+    color: "#B8925A",
+    fontSize: 13,
+    lineHeight: 1,
+    cursor: "pointer",
+    padding: 0,
   },
   bottomRow: {
     marginTop: 20,

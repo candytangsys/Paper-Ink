@@ -35,6 +35,9 @@ export default function Board({
   previewCells,
   magnifierMode,
   onMagnifierTap,
+  previousPath,
+  hammerMode,
+  onHammerTap,
 }) {
   const n = puzzle.n;
   const naturalBoardPx = boardMetrics(n, 1).boardPx;
@@ -117,6 +120,12 @@ export default function Board({
       onMagnifierTap && onMagnifierTap(cell.row, cell.col);
       return;
     }
+    // Hammer mode (v3.6): same single-tap-no-drag pattern as the magnifier,
+    // but targets an existing given clue instead of a blank cell.
+    if (hammerMode) {
+      onHammerTap && onHammerTap(cell.row, cell.col);
+      return;
+    }
     lastKeyRef.current = `${cell.row}_${cell.col}`;
     setDragPos({ x, y });
     setDragging(true);
@@ -184,6 +193,29 @@ export default function Board({
         style={styles.lineLayer}
         viewBox={`0 0 ${boardPx} ${boardPx}`}
       >
+        {/* 路線記憶 (v3.6): faint dashed reference of the path right before
+            the player's first undo/retry this attempt — drawn first so the
+            real (solid) path always renders on top of it. */}
+        {previousPath && previousPath.slice(1).map(([r, c], i) => {
+          const [pr, pc] = previousPath[i];
+          const a = centerOf(pr, pc);
+          const b = centerOf(r, c);
+          return (
+            <line
+              key={`ghost-${pr}_${pc}-${r}_${c}`}
+              x1={a.x}
+              y1={a.y}
+              x2={b.x}
+              y2={b.y}
+              stroke="#8B8478"
+              strokeWidth={Math.max(2, cellSize * 0.1)}
+              strokeLinecap="round"
+              strokeDasharray="2 6"
+              opacity={0.5}
+            />
+          );
+        })}
+
         {filledOrder.slice(1).map(([r, c], i) => {
           const [pr, pc] = filledOrder[i];
           const a = centerOf(pr, pc);
@@ -231,6 +263,8 @@ export default function Board({
           const num = numberAt(r, c);
           const isFilled = filledSet.has(key);
           const isClueOnly = !isFilled && puzzle.clueMap[key] !== undefined;
+          const isHammerable =
+            hammerMode && isClueOnly && puzzle.clueMap[key] !== 1 && puzzle.clueMap[key] !== puzzle.total;
           const isCandidate = candidateSet.has(key);
           const isRevealed = !isFilled && !isClueOnly && revealedCell && revealedCell.key === key;
           const isRootCause = !isFilled && rootCauseCell === key;
@@ -280,6 +314,15 @@ export default function Board({
             border = `1.5px dashed rgba(139,92,157,${(0.7 * strength).toFixed(3)})`;
             color = "#5A3C66";
             fontWeight = 600;
+          } else if (isHammerable) {
+            // 錘子 targeting mode — an amber ring on the clue cells that can
+            // actually be hammered (excludes start/end), distinct from the
+            // plain clue styling so it reads as "tap to remove."
+            bg = "#E7DBBF";
+            border = "2px dashed #8B6A32";
+            color = "#8B6A32";
+            fontWeight = 700;
+            boxShadow = "0 0 0 3px rgba(139,106,50,0.2)";
           } else if (isClueOnly) {
             bg = "#E7DBBF";
             border = "1.5px solid rgba(43,42,40,0.5)";
@@ -297,9 +340,12 @@ export default function Board({
             <button
               key={key}
               onClick={(e) => {
-                if (e.detail === 0) (magnifierMode ? onMagnifierTap && onMagnifierTap(r, c) : onCellClick(r, c));
+                if (e.detail !== 0) return;
+                if (magnifierMode) onMagnifierTap && onMagnifierTap(r, c);
+                else if (hammerMode) onHammerTap && onHammerTap(r, c);
+                else onCellClick(r, c);
               }}
-              className={isShaking ? "ink-shake" : isCandidate || isRootCause || isPreview ? "ink-pulse" : ""}
+              className={isShaking ? "ink-shake" : isCandidate || isRootCause || isPreview || isHammerable ? "ink-pulse" : ""}
               style={{
                 ...styles.cell,
                 width: cellSize,
@@ -313,7 +359,7 @@ export default function Board({
                 position: "relative",
                 zIndex: 1,
                 touchAction: "none",
-                cursor: magnifierMode ? "crosshair" : "pointer",
+                cursor: magnifierMode || hammerMode ? "crosshair" : "pointer",
                 WebkitTapHighlightColor: "transparent",
               }}
             >

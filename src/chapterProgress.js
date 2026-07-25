@@ -34,6 +34,20 @@ export function isChapterUnlocked(size) {
   return getChapterEntry(prevSize).chapterClearCount >= CHAPTER_MILESTONE;
 }
 
+// The furthest CHAPTERS index the player has actually unlocked so far —
+// used to gate tool availability (toolUnlock.js's TOOL_UNLOCK_CHAPTER_INDEX)
+// on overall progress rather than on whichever chapter happens to be open
+// right now, so replaying an early chapter after unlocking later ones never
+// takes tools away again.
+export function highestUnlockedChapterIndex() {
+  let idx = 0;
+  for (let i = 1; i < CHAPTERS.length; i++) {
+    if (!isChapterUnlocked(CHAPTERS[i])) break;
+    idx = i;
+  }
+  return idx;
+}
+
 // Peeks at whether the *next* clear in `size`'s chapter would land on a
 // milestone multiple (10th, 20th, 30th, ...) — "同大關卡每累積 10 關 +30"
 // repeats every 10 clears, it isn't a one-time unlock bonus. Exposed

@@ -159,6 +159,14 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
   // end is invoked directly (see placeNextCell/previewPath).
   const [stuckBannerVisible, setStuckBannerVisible] = useState(false);
   const [rootCause, setRootCause] = useState(null); // { lastGoodStep, suggestedCell } | null
+  // 路線記憶 (v3.6): a snapshot of the path right before the player's first
+  // undo/restart *this attempt* — a faint reference ghost so they can see
+  // where they got to before backing out. Only the first regression each
+  // attempt takes the snapshot (repeated undos afterward don't keep
+  // overwriting it down to nothing); cleared on start()/restart() of a new
+  // attempt, shown until the puzzle is won.
+  const [previousPath, setPreviousPath] = useState(null); // [[r,c], ...] | null
+  const previousPathTakenRef = useRef(false);
   const timerRef = useRef(null);
   const puzzleRef = useRef(null);
   // Idle-triggered stuck check (v3.3) — stuckTimerRef holds the pending
@@ -237,6 +245,8 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
     setRootCause(null);
     setPreviewCells([]);
     setStuckBannerVisible(false);
+    setPreviousPath(null);
+    previousPathTakenRef.current = false;
     wonRef.current = false;
     setWon(false);
     usedToolRef.current = false;
@@ -245,10 +255,23 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
 
   // Resets progress on the *same* puzzle instance (no regeneration) — used
   // by "play again"/"retry" so a retry is actually a retry, not a new
-  // random board.
+  // random board. Preserves this attempt's ghost-path snapshot (start()
+  // above always clears it, since it's also used for genuinely new
+  // puzzles) — if no snapshot was taken yet, this restart itself counts as
+  // the first regression and takes one from the pre-restart path.
   const restart = useCallback(() => {
-    if (puzzleRef.current) start(puzzleRef.current);
-  }, [start]);
+    if (!puzzleRef.current) return;
+    const ghost = previousPathTakenRef.current
+      ? previousPath
+      : pathRef.current.length > 0
+      ? pathRef.current.slice()
+      : null;
+    start(puzzleRef.current);
+    if (ghost) {
+      previousPathTakenRef.current = true;
+      setPreviousPath(ghost);
+    }
+  }, [start, previousPath]);
 
   /* timer */
   useEffect(() => {
@@ -336,6 +359,10 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
     if (wonRef.current) return;
     const order = pathRef.current;
     if (order.length === 0) return;
+    if (!previousPathTakenRef.current) {
+      previousPathTakenRef.current = true;
+      setPreviousPath(order.slice());
+    }
     scheduleStuckCheck();
     setPath(order.slice(0, -1));
     onUndoUsedRef.current && onUndoUsedRef.current();
@@ -432,6 +459,32 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
     return true;
   }, [scheduleStuckCheck]);
 
+  // 錘子 (v3.6): deletes one of the puzzle's own given clue numbers, turning
+  // it back into an ordinary blank cell the player can pass through at
+  // whatever step their own path reaches it — loosens a constraint rather
+  // than revealing a solution. The engine never assumes a fixed clue set
+  // (findCompletion() above just reads whatever's in clueMap at call time),
+  // so dropping one clue can only enlarge the solution space, never make
+  // the puzzle unsolvable. Start (clue 1) and the final clue (`total`) are
+  // protected — they anchor where the player begins/ends — and a clue the
+  // path has already filled has nothing left to remove.
+  const hammerClue = useCallback((r, c) => {
+    const puzzle = puzzleRef.current;
+    if (!puzzle || wonRef.current) return false;
+    const key = `${r}_${c}`;
+    const clueVal = puzzle.clueMap[key];
+    if (clueVal === undefined || clueVal === 1 || clueVal === puzzle.total) return false;
+    if (pathRef.current.some(([fr, fc]) => fr === r && fc === c)) return false;
+    usedToolRef.current = true;
+    scheduleStuckCheck();
+    const nextClueMap = { ...puzzle.clueMap };
+    delete nextClueMap[key];
+    const nextPuzzle = { ...puzzle, clueMap: nextClueMap };
+    puzzleRef.current = nextPuzzle;
+    setPuzzleState(nextPuzzle);
+    return true;
+  }, [scheduleStuckCheck]);
+
   /* derived candidate cells (valid next taps) for gentle highlighting */
   const candidateSet = useMemo(() => {
     if (!puzzle || won) return new Set();
@@ -465,6 +518,7 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
     previewCells,
     stuckBannerVisible,
     rootCause,
+    previousPath,
     start,
     restart,
     advanceTo,
@@ -474,6 +528,7 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
     placeNextCell,
     previewPath,
     freezeTime,
+    hammerClue,
     dismissStuckBanner,
   };
 }

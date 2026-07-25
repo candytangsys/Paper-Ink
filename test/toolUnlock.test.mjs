@@ -19,10 +19,10 @@ test("getToolCost escalates per tool as it's repeatedly bought, independent of o
 
   unlockViaPoints("magnifier", 10); // costs 10, count -> 1
   assert.equal(getToolPurchaseCount("magnifier"), 1);
-  assert.equal(getToolCost(10, "magnifier"), 12); // +20% of base per prior purchase
+  assert.equal(getToolCost(10, "magnifier"), 13); // +30% of base per prior purchase
 
-  unlockViaPoints("magnifier", 10); // costs 12, count -> 2
-  assert.equal(getToolCost(10, "magnifier"), 14);
+  unlockViaPoints("magnifier", 10); // costs 13, count -> 2
+  assert.equal(getToolCost(10, "magnifier"), 16);
 
   // A different tool's cost is unaffected by magnifier's purchases.
   assert.equal(getToolCost(25, "rootCause"), 25);

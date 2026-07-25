@@ -1,9 +1,18 @@
-// Shared "watch ad or spend points" picker for the two hint tools (放大鏡 /
-// 溯源符, v3.1 §一之3/4b). Used by both NumberLink.jsx and Daily.jsx so the
-// unlock UX never drifts between tutorial levels and the Daily Challenge.
-export default function ToolUnlockSheet({ open, title, cost, pointsBalance, error, labels, onWatchAd, onSpendPoints, onCancel }) {
+// Shared "watch ad or spend points" picker for the hint tools (放大鏡 /
+// 溯源符 / ..., v3.1 §一之3/4b). Used by both NumberLink.jsx and Daily.jsx so
+// the unlock UX never drifts between tutorial levels and the Daily
+// Challenge.
+//
+// v3.6: an optional `resetInfo` — { label, cost, watchAdLabel,
+// spendPointsLabel(cost), onWatchAd, onSpendPoints } — renders an extra
+// section for clearing a tool's purchase-escalation markup on demand,
+// separate from the main unlock actions above it. Only passed in by callers
+// when the tool actually has a markup to clear (toolUnlock.js's
+// canResetEscalation()).
+export default function ToolUnlockSheet({ open, title, cost, pointsBalance, error, labels, onWatchAd, onSpendPoints, onCancel, resetInfo }) {
   if (!open) return null;
   const canAfford = pointsBalance == null || pointsBalance >= cost;
+  const canAffordReset = resetInfo && (pointsBalance == null || pointsBalance >= resetInfo.cost);
 
   return (
     <div style={styles.overlay} onClick={onCancel}>
@@ -26,6 +35,24 @@ export default function ToolUnlockSheet({ open, title, cost, pointsBalance, erro
             {labels.cancel}
           </button>
         </div>
+
+        {resetInfo && (
+          <div style={styles.resetSection}>
+            <div style={styles.resetLabel}>{resetInfo.label}</div>
+            <div style={styles.resetActions}>
+              <button onClick={resetInfo.onWatchAd} style={styles.resetBtn}>
+                {resetInfo.watchAdLabel}
+              </button>
+              <button
+                onClick={resetInfo.onSpendPoints}
+                disabled={!canAffordReset}
+                style={{ ...styles.resetBtn, ...(canAffordReset ? {} : styles.btnDisabled) }}
+              >
+                {resetInfo.spendPointsLabel(resetInfo.cost)}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -114,6 +141,34 @@ const styles = {
     color: "#8B8478",
     fontSize: 12.5,
     fontFamily: "'EB Garamond', serif",
+    letterSpacing: 1,
+    cursor: "pointer",
+  },
+  resetSection: {
+    marginTop: 16,
+    paddingTop: 14,
+    borderTop: "1px solid rgba(43,42,40,0.14)",
+  },
+  resetLabel: {
+    fontSize: 11.5,
+    color: "#8B8478",
+    fontFamily: "'EB Garamond', serif",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  resetActions: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  resetBtn: {
+    padding: "9px 0",
+    borderRadius: 4,
+    border: "1px solid rgba(139,106,50,0.4)",
+    background: "transparent",
+    color: "#8B6A32",
+    fontSize: 12.5,
+    fontFamily: "'Noto Serif TC', serif",
     letterSpacing: 1,
     cursor: "pointer",
   },

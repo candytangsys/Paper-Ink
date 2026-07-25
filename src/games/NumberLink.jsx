@@ -12,7 +12,8 @@ import { fmtTime } from "../engine/share.mjs";
 import { generateHamiltonianPath, pickClueIndices, hasDiagonalStep } from "../engine/hamiltonian.mjs";
 import { CHAPTERS, CHAPTER_MILESTONE, DIAGONAL_FORCED_SIZES, clueRatioForClear, nextChapterSize } from "../engine/chapters.mjs";
 import { parTimeSec, computeScore } from "../engine/score.mjs";
-import { getChapterEntry, isChapterUnlocked, recordChapterClear, willHitMilestoneOnNextClear } from "../chapterProgress.js";
+import { getChapterEntry, isChapterUnlocked, recordChapterClear, willHitMilestoneOnNextClear, highestUnlockedChapterIndex } from "../chapterProgress.js";
+import { TOOL_UNLOCK_CHAPTER_INDEX } from "../toolUnlock.js";
 import { recordLevelHistoryEntry } from "../levelHistory.js";
 import { maybeShowInterstitial } from "../interstitialAd.js";
 import { track } from "../analytics.js";
@@ -238,6 +239,18 @@ export default function NumberLink({ onExit, initialSize = null }) {
   }, []);
   const showIntro = !introDismissed && chapterSize === CHAPTERS[0] && chapterClearCount < 3;
 
+  // v3.6: tools unlock progressively by the player's furthest-reached
+  // chapter (not whichever chapter is being replayed right now), so going
+  // back to practice an early chapter never takes already-unlocked tools
+  // away again. Recomputed every render — chapterClearCount changing after
+  // a win already triggers one, and the read itself is cheap.
+  const unlockedChapterIndex = highestUnlockedChapterIndex();
+  const chapterUnlockLabel = useCallback((toolKey) => {
+    const idx = TOOL_UNLOCK_CHAPTER_INDEX[toolKey] ?? 0;
+    const size = CHAPTERS[idx];
+    return `${size}×${size}`;
+  }, []);
+
   if (!loaded) {
     return (
       <div style={styles.rootLoading}>
@@ -262,6 +275,8 @@ export default function NumberLink({ onExit, initialSize = null }) {
         onNextLevel={() => startChapterLevel(chapterSize)}
         onNextChapter={justUnlocked != null ? () => startChapterLevel(justUnlocked) : null}
         onReplay={session.restart}
+        unlockedChapterIndex={unlockedChapterIndex}
+        chapterUnlockLabel={chapterUnlockLabel}
         t={t}
         lang={lang}
       />
@@ -274,7 +289,7 @@ export default function NumberLink({ onExit, initialSize = null }) {
 
 function GameScreen({
   chapterSize, chapterClearCount, bestScore, lastScore, pointsBalance, justUnlocked,
-  session, onBack, onNextLevel, onNextChapter, onReplay, t, lang,
+  session, onBack, onNextLevel, onNextChapter, onReplay, unlockedChapterIndex, chapterUnlockLabel, t, lang,
 }) {
   const { puzzle, taps, mistakes, elapsed, won } = session;
   const [toast, setToast] = useState(null);
@@ -325,7 +340,12 @@ function GameScreen({
         <StatPill label={t.mistakes(mistakes)} warn={mistakes > 0} />
       </div>
 
-      <PlayArea session={session} toolContext="tutorial" />
+      <PlayArea
+        session={session}
+        toolContext="tutorial"
+        unlockedChapterIndex={unlockedChapterIndex}
+        chapterUnlockLabel={chapterUnlockLabel}
+      />
 
       {won && (
         <div style={styles.winOverlay}>

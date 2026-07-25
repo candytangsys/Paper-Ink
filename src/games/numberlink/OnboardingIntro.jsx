@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Feather, Undo2, RotateCcw, Search, Crosshair, Wand2, Route, Snowflake, Coins } from "lucide-react";
+import { Feather, Undo2, RotateCcw, Search, Crosshair, Wand2, Route, Snowflake, Hammer, Coins } from "lucide-react";
 import { useLanguage } from "../../i18n.jsx";
 import { buildHashRoute } from "../../router.js";
 import { boardMetrics } from "./Board.jsx";
@@ -165,21 +165,27 @@ const UNDO_FRAMES = [
 // them in the caption.
 const STUCK_FRAMES = [
   { filledCount: 2, showBanner: false, ms: 800 },
-  { filledCount: 2, showBanner: true, ms: 1000 },
+  // Held at least 5s once the banner is showing — this is the densest single
+  // frame in the whole walkthrough, so it gets a deliberately long, explicit
+  // read-it pause rather than looping straight back into the demo.
+  { filledCount: 2, showBanner: true, ms: 5000 },
   { filledCount: 0, showBanner: false, ms: 500 },
   { filledCount: 1, showBanner: false, ms: 220 },
   { filledCount: 2, showBanner: false, ms: 220 },
 ];
 
-const TOOL_KEYS = ["magnifier", "rootCause", "relay", "preview", "freeze"];
-const TOOL_ICONS = { magnifier: Search, rootCause: Crosshair, relay: Wand2, preview: Route, freeze: Snowflake };
+const TOOL_KEYS = ["freeze", "magnifier", "preview", "rootCause", "hammer", "relay"];
+const TOOL_ICONS = { freeze: Snowflake, magnifier: Search, preview: Route, rootCause: Crosshair, hammer: Hammer, relay: Wand2 };
 const TOOLS_FRAMES = [
   { visible: 0, ms: 180 },
   { visible: 1, ms: 150 },
   { visible: 2, ms: 150 },
   { visible: 3, ms: 150 },
   { visible: 4, ms: 150 },
-  { visible: 5, ms: 2000 },
+  { visible: 5, ms: 150 },
+  // Same "at least 5s, don't rush the read" treatment as the stuck-banner
+  // step above, on the final frame (all icons shown + the points chip).
+  { visible: 6, ms: 5000 },
 ];
 
 function ConnectDemo({ reduced }) {
@@ -258,13 +264,13 @@ function ToolsDemo({ reduced }) {
       <span
         style={{
           ...styles.pointsChip,
-          opacity: f.visible >= 5 ? 1 : 0,
-          transform: f.visible >= 5 ? "translateY(0)" : "translateY(6px)",
+          opacity: f.visible >= 6 ? 1 : 0,
+          transform: f.visible >= 6 ? "translateY(0)" : "translateY(6px)",
           transition: "opacity 0.3s ease, transform 0.3s ease",
         }}
       >
         <Coins size={14} color="#B8925A" />
-        <span>+50</span>
+        <span>+18</span>
       </span>
     </div>
   );
@@ -283,7 +289,7 @@ const TEXT = {
         undo: "回退",
         dismiss: "忽略",
       },
-      { title: "④ 道具與積分", caption: "完成關卡會累積積分，右側 5 種道具可用積分或看廣告解鎖，助你度過難關。" },
+      { title: "④ 道具與積分", caption: "完成關卡會累積積分，右側道具（隨關卡進度陸續解鎖）可用積分或看廣告解鎖，助你度過難關。" },
     ],
     prev: "上一步",
     next: "下一步",
@@ -303,7 +309,7 @@ const TEXT = {
         undo: "Undo",
         dismiss: "Dismiss",
       },
-      { title: "④ Tools & Points", caption: "Clearing puzzles earns points. 5 tools on the right can be unlocked with points or a quick ad when you need help." },
+      { title: "④ Tools & Points", caption: "Clearing puzzles earns points. Tools on the right (unlocked gradually as you progress) can be unlocked with points or a quick ad when you need help." },
     ],
     prev: "Back",
     next: "Next",
