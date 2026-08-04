@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ArrowLeft, Timer, Feather, Share2 } from "lucide-react";
-import { inkWashStyle } from "../theme.jsx";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "../components/LangToggle.jsx";
 import PlayArea from "./numberlink/PlayArea.jsx";
@@ -261,7 +260,6 @@ export default function NumberLink({ onExit, initialSize = null }) {
 
   return (
     <div style={styles.root}>
-      <div style={inkWashStyle} />
       <LangToggle />
       <GameScreen
         chapterSize={chapterSize}

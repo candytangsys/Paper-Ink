@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from "react";
 import { Home, Feather, ChevronLeft, ChevronRight, Flame, Check, LifeBuoy, Lock } from "lucide-react";
-import { COLORS, inkWashStyle, homeBtnStyle, brandRowStyle, eyebrowStyle } from "../theme.jsx";
+import { COLORS, homeBtnStyle, brandRowStyle, eyebrowStyle } from "../theme.jsx";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "./LangToggle.jsx";
 import { loadDailyHistory } from "../dailyHistory.js";
@@ -109,7 +109,6 @@ export default function CalendarPage({ onExit, onSelectDate }) {
 
   return (
     <div style={styles.root}>
-      <div style={inkWashStyle} />
       <LangToggle />
       <div style={styles.wrap}>
         {onExit && (

@@ -54,11 +54,6 @@ export function GlobalInkStyle() {
         font-family: ${FONT_SERIF};
       }
 
-      @keyframes ink-drift {
-        0% { transform: translate(-6%, -4%) scale(1); }
-        50% { transform: translate(4%, 3%) scale(1.06); }
-        100% { transform: translate(-6%, -4%) scale(1); }
-      }
       @keyframes ink-shake {
         0%, 100% { transform: translateX(0); }
         25% { transform: translateX(-3px); }
@@ -83,27 +78,13 @@ export function GlobalInkStyle() {
       .ink-ring-pulse { animation: ink-ring 1.6s ease-out infinite; }
 
       @media (prefers-reduced-motion: reduce) {
-        .ink-shake, .ink-pulse, .ink-rise, .ink-drift, .ink-ring-pulse {
+        .ink-shake, .ink-pulse, .ink-rise, .ink-ring-pulse {
           animation: none !important;
         }
       }
     `}</style>
   );
 }
-
-// Background wash: a faint, slowly drifting bloom of ink instead of neon glow.
-export const inkWashStyle = {
-  position: "absolute",
-  top: "-25%",
-  left: "-15%",
-  width: "130%",
-  height: "65%",
-  background:
-    "radial-gradient(closest-side, rgba(76,91,110,0.10), transparent 70%), radial-gradient(closest-side, rgba(176,121,60,0.09), transparent 72%)",
-  filter: "blur(60px)",
-  animation: "ink-drift 26s ease-in-out infinite",
-  pointerEvents: "none",
-};
 
 // Shared chrome that appears on the home screen and every game screen, so
 // it only needs to be defined (and kept visually consistent) once.

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Home, Feather, ChevronDown, Lock, Search, Crosshair, Wand2, Route, Snowflake, Hammer } from "lucide-react";
-import { COLORS, inkWashStyle, homeBtnStyle, brandRowStyle, eyebrowStyle } from "../theme.jsx";
+import { COLORS, homeBtnStyle, brandRowStyle, eyebrowStyle } from "../theme.jsx";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "./LangToggle.jsx";
 import { CHAPTERS, CHAPTER_MILESTONE, SCORE_MILESTONE_INTERVAL } from "../engine/chapters.mjs";
@@ -144,7 +144,6 @@ export default function RulesPage({ onExit }) {
 
   return (
     <div style={styles.root}>
-      <div style={inkWashStyle} />
       <LangToggle />
       <div style={styles.wrap}>
         {onExit && (

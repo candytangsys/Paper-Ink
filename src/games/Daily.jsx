@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Timer, Feather, Home, Share2, Flame, RotateCcw, Lock } from "lucide-react";
-import { COLORS, inkWashStyle, homeBtnStyle, brandRowStyle, eyebrowStyle } from "../theme.jsx";
+import { COLORS, homeBtnStyle, brandRowStyle, eyebrowStyle } from "../theme.jsx";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "../components/LangToggle.jsx";
 import PlayArea from "./numberlink/PlayArea.jsx";
@@ -474,7 +474,6 @@ export default function Daily({ date, onExit }) {
 
   return (
     <div style={styles.root}>
-      <div style={inkWashStyle} />
       <LangToggle />
       <div style={styles.wrap}>
         {onExit && (
