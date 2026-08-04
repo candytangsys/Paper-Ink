@@ -192,15 +192,23 @@ export default function RulesPage({ onExit }) {
               <>
                 <p style={styles.para}>{t.toolsIntro}</p>
                 <div style={styles.toolList}>
-                  {TOOL_ORDER.map((key) => {
+                  {TOOL_ORDER.map((key, i) => {
                     const Icon = TOOL_ICONS[key];
                     const copy = t.tools[key];
                     const requiredIdx = TOOL_UNLOCK_CHAPTER_INDEX[key] ?? 0;
                     const locked = unlockedIdx < requiredIdx;
                     const toolOpen = openTool === key;
                     const size = CHAPTERS[requiredIdx];
+                    const isLast = i === TOOL_ORDER.length - 1;
                     return (
-                      <div key={key} style={{ ...styles.toolCard, ...(locked ? styles.toolCardLocked : {}) }}>
+                      <div
+                        key={key}
+                        style={{
+                          ...styles.toolCard,
+                          ...(isLast ? {} : styles.toolCardDivider),
+                          ...(locked ? styles.toolCardLocked : {}),
+                        }}
+                      >
                         <button
                           onClick={() => !locked && setOpenTool(toolOpen ? null : key)}
                           style={styles.toolHeadBtn}
@@ -299,14 +307,13 @@ const styles = {
   toolList: {
     display: "flex",
     flexDirection: "column",
-    gap: 8,
     marginBottom: 12,
   },
   toolCard: {
-    background: "#F3EEE1",
-    border: "1px solid rgba(43,42,40,0.12)",
-    borderRadius: 6,
-    padding: "2px 12px",
+    padding: "0 2px",
+  },
+  toolCardDivider: {
+    borderBottom: "1px solid rgba(43,42,40,0.10)",
   },
   toolCardLocked: {
     opacity: 0.7,
@@ -314,7 +321,7 @@ const styles = {
   toolHeadBtn: {
     width: "100%",
     display: "flex",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 8,
     background: "transparent",
     border: "none",
@@ -335,9 +342,7 @@ const styles = {
     fontFamily: "'EB Garamond', serif",
     flex: "1 1 auto",
     minWidth: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+    lineHeight: 1.4,
   },
   toolDetail: {
     fontSize: 12.5,

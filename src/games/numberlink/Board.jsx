@@ -390,7 +390,7 @@ const styles = {
     borderRadius: 6,
     background: "#EAE2CF",
     border: "1px solid rgba(43,42,40,0.14)",
-    boxShadow: "0 2px 24px rgba(43,42,40,0.10), inset 0 0 0 1px rgba(243,238,225,0.6)",
+    boxShadow: "0 1px 4px rgba(43,42,40,0.08)",
   },
   lineLayer: {
     position: "absolute",

@@ -290,6 +290,13 @@ export default function PlayArea({
     TOOL_LOCKED[key] = !isToolUnlockedAtChapterIndex(key, unlockedChapterIndex);
   });
   const rootCauseUnlocked = !TOOL_LOCKED.rootCause;
+  // Only one intro bubble at a time (v3.7): the tool row is now a wrapping
+  // grid instead of a single vertical rail, so multiple simultaneous
+  // bubbles (e.g. 靜心符/放大鏡 unlocking together on chapter 0) would land
+  // in adjacent columns/rows and overlap into unreadable text. Showing just
+  // the earliest not-yet-seen tool turns it into a one-at-a-time guided
+  // tour instead — dismissing one reveals the next.
+  const nextIntroTool = TOOL_ORDER.find((key) => !TOOL_LOCKED[key] && !hasSeenToolIntro(key));
 
   const openUnlockSheet = (key) => {
     if (TOOL_LOCKED[key]) return;
@@ -311,114 +318,112 @@ export default function PlayArea({
 
   return (
     <>
-      <div style={styles.playRow}>
-        {showTools && (
-          <div style={styles.leftRail}>
-            <div style={styles.pointsChip} title={t.pointsLabel} aria-label={t.pointsLabel}>
-              <Coins size={14} color="#B8925A" />
-              <span>{liveBalance}</span>
-            </div>
+      {showTools && (
+        <div style={styles.topBar}>
+          <div style={styles.pointsChip} title={t.pointsLabel} aria-label={t.pointsLabel}>
+            <Coins size={14} color="#B8925A" />
+            <span>{liveBalance}</span>
           </div>
-        )}
-
-        <div style={styles.boardColumn}>
-          {filledOrder.length === 0 && !won && <div style={styles.startHint}>{t.startHint}</div>}
-          {showTools && hammerMode && <div style={styles.hammerHint}>{t.hammerHint}</div>}
-          {showTools && stuckBannerVisible && (
-            <div style={styles.stuckBanner}>
-              <span>{t.stuckPrompt}</span>
-              <div style={styles.stuckActions}>
-                {rootCauseUnlocked && (
-                  <button onClick={() => openUnlockSheet("rootCause")} style={styles.stuckBtn}>{t.useToolBtn}</button>
-                )}
-                <button onClick={handleUndoClick} style={styles.stuckBtn}>{t.undo}</button>
-                <button onClick={dismissStuckBanner} style={styles.stuckBtnGhost}>{t.dismissBtn}</button>
-              </div>
-            </div>
-          )}
-          {/* 溯源符 (v3.6): now names the exact step to rewind to, instead of
-              only marking the suggested next cell on the board. The free
-              stuck banner above stays deliberately vague ("it's stuck") —
-              this detail is the paid tool's payoff. */}
-          {showTools && rootCause && (
-            <div style={styles.rootCauseCaption}>{t.rootCauseSuggest(rootCause.lastGoodStep)}</div>
-          )}
-
-          <Board
-            puzzle={puzzle}
-            filledOrder={filledOrder}
-            filledSet={filledSet}
-            candidateSet={candidateSet}
-            won={won}
-            shakeKey={shakeKey}
-            onCellClick={advanceTo}
-            revealedCell={revealedCell}
-            rootCauseCell={rootCause ? rootCause.suggestedCell : null}
-            previewCells={showTools ? previewCells : undefined}
-            magnifierMode={showTools && magnifierMode}
-            onMagnifierTap={(r, c) => {
-              revealCell(r, c);
-              setMagnifierMode(false);
-            }}
-            previousPath={showTools ? previousPath : undefined}
-            hammerMode={showTools && hammerMode}
-            onHammerTap={(r, c) => {
-              if (hammerClue(r, c)) setHammerMode(false);
-            }}
-          />
         </div>
+      )}
 
-        {showTools && (
-          <div style={styles.rightRail}>
-            {TOOL_ORDER.map((key) => {
-              const Icon = TOOL_ICONS[key];
-              const copy = t.tools[key];
-              const active = (key === "magnifier" && magnifierMode) || (key === "hammer" && hammerMode);
-              const locked = TOOL_LOCKED[key];
-              const showIntro = !locked && !hasSeenToolIntro(key);
-              return (
-                <div key={key} style={styles.toolSlot}>
-                  <button
-                    onClick={() => {
-                      if (locked) return;
-                      if (key === "magnifier" && magnifierMode) setMagnifierMode(false);
-                      else if (key === "hammer" && hammerMode) setHammerMode(false);
-                      else openUnlockSheet(key);
-                      if (showIntro) dismissToolIntro(key);
-                    }}
-                    disabled={locked || TOOL_DISABLED[key]}
-                    style={{
-                      ...styles.toolBtn,
-                      ...(active ? styles.toolBtnActive : {}),
-                      ...(locked ? styles.toolBtnLocked : {}),
-                    }}
-                    title={locked ? t.lockedTitle(chapterUnlockLabel ? chapterUnlockLabel(key) : "") : copy.name}
-                  >
-                    <Icon size={18} />
-                    <span style={styles.toolLabel}>{copy.short}</span>
-                    {!locked && <span style={styles.toolCost}>{liveCost(key)}</span>}
-                  </button>
-                  {showIntro && (
-                    <div style={styles.toolIntroBubble}>
-                      <span>{copy.intro}</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          dismissToolIntro(key);
-                        }}
-                        style={styles.toolIntroClose}
-                        aria-label={t.dismissBtn}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+      <div style={styles.boardColumn}>
+        {filledOrder.length === 0 && !won && <div style={styles.startHint}>{t.startHint}</div>}
+        {showTools && hammerMode && <div style={styles.hammerHint}>{t.hammerHint}</div>}
+        {showTools && stuckBannerVisible && (
+          <div style={styles.stuckBanner}>
+            <span>{t.stuckPrompt}</span>
+            <div style={styles.stuckActions}>
+              {rootCauseUnlocked && (
+                <button onClick={() => openUnlockSheet("rootCause")} style={styles.stuckBtn}>{t.useToolBtn}</button>
+              )}
+              <button onClick={handleUndoClick} style={styles.stuckBtn}>{t.undo}</button>
+              <button onClick={dismissStuckBanner} style={styles.stuckBtnGhost}>{t.dismissBtn}</button>
+            </div>
           </div>
         )}
+        {/* 溯源符 (v3.6): now names the exact step to rewind to, instead of
+            only marking the suggested next cell on the board. The free
+            stuck banner above stays deliberately vague ("it's stuck") —
+            this detail is the paid tool's payoff. */}
+        {showTools && rootCause && (
+          <div style={styles.rootCauseCaption}>{t.rootCauseSuggest(rootCause.lastGoodStep)}</div>
+        )}
+
+        <Board
+          puzzle={puzzle}
+          filledOrder={filledOrder}
+          filledSet={filledSet}
+          candidateSet={candidateSet}
+          won={won}
+          shakeKey={shakeKey}
+          onCellClick={advanceTo}
+          revealedCell={revealedCell}
+          rootCauseCell={rootCause ? rootCause.suggestedCell : null}
+          previewCells={showTools ? previewCells : undefined}
+          magnifierMode={showTools && magnifierMode}
+          onMagnifierTap={(r, c) => {
+            revealCell(r, c);
+            setMagnifierMode(false);
+          }}
+          previousPath={showTools ? previousPath : undefined}
+          hammerMode={showTools && hammerMode}
+          onHammerTap={(r, c) => {
+            if (hammerClue(r, c)) setHammerMode(false);
+          }}
+        />
       </div>
+
+      {showTools && (
+        <div style={styles.toolRow}>
+          {TOOL_ORDER.map((key) => {
+            const Icon = TOOL_ICONS[key];
+            const copy = t.tools[key];
+            const active = (key === "magnifier" && magnifierMode) || (key === "hammer" && hammerMode);
+            const locked = TOOL_LOCKED[key];
+            const showIntro = key === nextIntroTool;
+            return (
+              <div key={key} style={styles.toolSlot}>
+                <button
+                  onClick={() => {
+                    if (locked) return;
+                    if (key === "magnifier" && magnifierMode) setMagnifierMode(false);
+                    else if (key === "hammer" && hammerMode) setHammerMode(false);
+                    else openUnlockSheet(key);
+                    if (showIntro) dismissToolIntro(key);
+                  }}
+                  disabled={locked || TOOL_DISABLED[key]}
+                  style={{
+                    ...styles.toolBtn,
+                    ...(active ? styles.toolBtnActive : {}),
+                    ...(locked ? styles.toolBtnLocked : {}),
+                  }}
+                  title={locked ? t.lockedTitle(chapterUnlockLabel ? chapterUnlockLabel(key) : "") : copy.name}
+                >
+                  <Icon size={18} />
+                  <span style={styles.toolLabel}>{copy.short}</span>
+                  {!locked && <span style={styles.toolCost}>{liveCost(key)}</span>}
+                </button>
+                {showIntro && (
+                  <div style={styles.toolIntroBubble}>
+                    <span>{copy.intro}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        dismissToolIntro(key);
+                      }}
+                      style={styles.toolIntroClose}
+                      aria-label={t.dismissBtn}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {showTools && (
         <div style={styles.bottomRow}>
@@ -457,56 +462,42 @@ export default function PlayArea({
 }
 
 const styles = {
-  playRow: {
+  topBar: {
     width: "100%",
     display: "flex",
-    alignItems: "flex-start",
-    justifyContent: "center",
-    gap: 8,
-  },
-  leftRail: {
-    flex: "0 0 auto",
-    width: 52,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 8,
-    paddingTop: 4,
-  },
-  rightRail: {
-    flex: "0 0 auto",
-    width: 56,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 8,
-    paddingTop: 4,
-  },
-  toolSlot: {
-    position: "relative",
-    width: "100%",
+    justifyContent: "flex-start",
+    marginBottom: 10,
   },
   pointsChip: {
     display: "flex",
-    flexDirection: "column",
     alignItems: "center",
-    gap: 2,
-    width: "100%",
-    padding: "8px 4px",
-    borderRadius: 8,
-    background: "#EAE2CF",
+    gap: 6,
+    padding: "6px 12px",
+    borderRadius: 999,
+    background: "transparent",
     border: "1px solid rgba(43,42,40,0.16)",
-    fontSize: 12,
+    fontSize: 12.5,
     fontFamily: "'EB Garamond', serif",
     color: "#8B6A32",
     fontWeight: 600,
   },
   boardColumn: {
-    flex: "1 1 auto",
-    minWidth: 0,
+    width: "100%",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
+  },
+  toolRow: {
+    width: "100%",
+    display: "flex",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  toolSlot: {
+    position: "relative",
+    width: 64,
   },
   startHint: {
     marginBottom: 12,
@@ -616,10 +607,11 @@ const styles = {
   },
   toolIntroBubble: {
     position: "absolute",
-    top: 0,
-    right: "100%",
-    marginRight: 8,
-    width: 150,
+    bottom: "100%",
+    left: "50%",
+    transform: "translateX(-50%)",
+    marginBottom: 8,
+    width: 132,
     background: "#2B2A28",
     color: "#F3EEE1",
     borderRadius: 6,

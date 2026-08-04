@@ -12,7 +12,9 @@ import { createStreakStore } from "../engine/streak.mjs";
 import { getDailyEntry, recordDailyCompletion } from "../dailyHistory.js";
 import { getRestartCount, recordDailyRestart, DAILY_RESTART_LIMIT, DAILY_FAIL_MISTAKES } from "../dailyRestarts.js";
 import { isPastDayUnlocked, unlockPastDay, PAST_DAY_UNLOCK_COST } from "../dailyUnlock.js";
-import { unlockViaAd } from "../toolUnlock.js";
+import { unlockViaAd, TOOL_UNLOCK_CHAPTER_INDEX } from "../toolUnlock.js";
+import { highestUnlockedChapterIndex } from "../chapterProgress.js";
+import { CHAPTERS } from "../engine/chapters.mjs";
 import { todayUTCString } from "../dateUtil.js";
 import { shareDaily } from "../daily/shareFlow.js";
 import { SHARE_REWARD, hasClaimedShareReward, claimShareReward } from "../daily/shareReward.js";
@@ -445,6 +447,17 @@ export default function Daily({ date, onExit }) {
     }
   }, [date, t.insufficientPoints, applyPastUnlock]);
 
+  // Tool unlocks here must track the same regular-level chapter progress
+  // that gates them in NumberLink.jsx — otherwise Daily Challenge would
+  // hand out every tool for free regardless of how far the player has
+  // actually gotten in the regular levels.
+  const unlockedChapterIndex = highestUnlockedChapterIndex();
+  const chapterUnlockLabel = useCallback((toolKey) => {
+    const idx = TOOL_UNLOCK_CHAPTER_INDEX[toolKey] ?? 0;
+    const size = CHAPTERS[idx];
+    return `${size}×${size}`;
+  }, []);
+
   if (!puzzle) {
     return (
       <div style={styles.rootLoading}>
@@ -515,7 +528,14 @@ export default function Daily({ date, onExit }) {
             t={t}
           />
         ) : (
-          <GameArea session={session} t={t} onRestart={handleRestart} restartsRemaining={restartsRemaining} />
+          <GameArea
+            session={session}
+            t={t}
+            onRestart={handleRestart}
+            restartsRemaining={restartsRemaining}
+            unlockedChapterIndex={unlockedChapterIndex}
+            chapterUnlockLabel={chapterUnlockLabel}
+          />
         )}
 
         {newMilestone && <div style={styles.milestoneStamp}>{t.milestone(newMilestone)}</div>}
@@ -551,7 +571,7 @@ function LockedDayCard({ onUnlock, t }) {
   );
 }
 
-function GameArea({ session, t, onRestart, restartsRemaining }) {
+function GameArea({ session, t, onRestart, restartsRemaining, unlockedChapterIndex, chapterUnlockLabel }) {
   const { puzzle, taps, mistakes, elapsed, won } = session;
   if (!puzzle) return null;
   const nextNum = session.filledOrder.length + 1;
@@ -565,7 +585,15 @@ function GameArea({ session, t, onRestart, restartsRemaining }) {
         <StatPill label={t.mistakes(mistakes)} warn={mistakes > 0} />
       </div>
 
-      <PlayArea session={session} showTools toolContext="daily" onRestart={onRestart} restartsRemaining={restartsRemaining} />
+      <PlayArea
+        session={session}
+        showTools
+        toolContext="daily"
+        onRestart={onRestart}
+        restartsRemaining={restartsRemaining}
+        unlockedChapterIndex={unlockedChapterIndex}
+        chapterUnlockLabel={chapterUnlockLabel}
+      />
     </>
   );
 }
@@ -639,7 +667,7 @@ const styles = {
     zIndex: 1,
     width: "100%",
     maxWidth: 560,
-    padding: "56px 16px 40px",
+    padding: "56px 10px 40px",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
