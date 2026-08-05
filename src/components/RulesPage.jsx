@@ -126,7 +126,7 @@ const TEXT = {
     lockedAt: (label) => `Unlocks in the ${label} chapter`,
     tools: {
       magnifier: { name: "Magnifier", short: "Reveal the correct number for any cell.", detail: `From ${MAGNIFIER_COST} pts: reveal the correct number for any cell on the board.` },
-      rootCause: { name: "Root Cause", short: "Finds the last solvable step, tells you where to rewind to.", detail: `From ${ROOT_CAUSE_COST} pts: finds the last still-solvable step in your path and names exactly which step to rewind to.` },
+      rootCause: { name: "Trace", short: "Finds the last solvable step, tells you where to rewind to.", detail: `From ${ROOT_CAUSE_COST} pts: finds the last still-solvable step in your path and names exactly which step to rewind to.` },
       relay: { name: "Relay Brush", short: "Places the next correct cell for you.", detail: `From ${RELAY_COST} pts: places the next correct cell for you — the only tool that actually advances the path.` },
       preview: { name: "Guide Talisman", short: "Preview the next 3 cells.", detail: `From ${PREVIEW_COST} pts: preview the next 3 cells in sequence (no numbers shown).` },
       freeze: { name: "Stillness Talisman", short: "Refunds 15s off your time.", detail: `From ${FREEZE_COST} pts: instantly refunds 15s off your counted time, helping the speed bonus.` },

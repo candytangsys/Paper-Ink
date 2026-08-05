@@ -3,6 +3,7 @@ import { Undo2, RotateCcw, Search, Crosshair, Wand2, Route, Snowflake, Hammer, C
 import { useLanguage } from "../../i18n.jsx";
 import Board from "./Board.jsx";
 import ToolUnlockSheet from "./ToolUnlockSheet.jsx";
+import ToolIntroModal from "./ToolIntroModal.jsx";
 import { getPointsBalance } from "../../pointsWallet.js";
 import {
   MAGNIFIER_COST, ROOT_CAUSE_COST, RELAY_COST, PREVIEW_COST, FREEZE_COST, HAMMER_COST,
@@ -105,7 +106,7 @@ const TEXT = {
     spendPointsBtn: (cost) => `Spend ${cost} points`,
     balanceLabel: (bal) => `${bal} points available`,
     insufficientPoints: "Not enough points",
-    rootCauseSuggest: (n) => `Root Cause: rewind to step ${n} and restart from there`,
+    rootCauseSuggest: (n) => `Trace: rewind to step ${n} and restart from there`,
     lockedTitle: (chapterLabel) => `Unlocks in the ${chapterLabel} chapter`,
     resetLabel: "Price has climbed from repeat purchases",
     resetWatchAd: "Watch ad to reset price",
@@ -118,8 +119,8 @@ const TEXT = {
         intro: "Reveal the correct number for any cell on the board.",
       },
       rootCause: {
-        name: "Root Cause", short: "Root Cause", title: "Unlock Root Cause",
-        ad: "Watch a short clip to unlock root cause? (P0 stand-in for the rewarded ad)",
+        name: "Trace", short: "Trace", title: "Unlock Trace",
+        ad: "Watch a short clip to unlock trace? (P0 stand-in for the rewarded ad)",
         intro: "Finds the last still-solvable step in your path, and suggests which step to rewind to.",
       },
       relay: {
@@ -163,7 +164,7 @@ export default function PlayArea({
   const [unlockTool, setUnlockTool] = useState(null); // one of TOOL_ORDER | null
   const [unlockError, setUnlockError] = useState(null);
   const [liveBalance, setLiveBalance] = useState(() => getPointsBalance());
-  // Bumped whenever a tool-intro bubble is dismissed, just to force this
+  // Bumped whenever a tool-intro modal is dismissed, just to force this
   // component to re-check hasSeenToolIntro() (which reads localStorage, not
   // React state) on the next render.
   const [, setIntroSeenTick] = useState(0);
@@ -404,21 +405,6 @@ export default function PlayArea({
                   <span style={styles.toolLabel}>{copy.short}</span>
                   {!locked && <span style={styles.toolCost}>{liveCost(key)}</span>}
                 </button>
-                {showIntro && (
-                  <div style={styles.toolIntroBubble}>
-                    <span>{copy.intro}</span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        dismissToolIntro(key);
-                      }}
-                      style={styles.toolIntroClose}
-                      aria-label={t.dismissBtn}
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
               </div>
             );
           })}
@@ -455,6 +441,15 @@ export default function PlayArea({
           onSpendPoints={handleSpendPoints}
           onCancel={closeUnlockSheet}
           resetInfo={resetInfo}
+        />
+      )}
+
+      {showTools && nextIntroTool && (
+        <ToolIntroModal
+          toolKey={nextIntroTool}
+          title={t.tools[nextIntroTool].name}
+          caption={t.tools[nextIntroTool].intro}
+          onDismiss={() => dismissToolIntro(nextIntroTool)}
         />
       )}
     </>
@@ -606,35 +601,6 @@ const styles = {
     fontFamily: "'EB Garamond', serif",
     color: "#B8925A",
     fontWeight: 700,
-  },
-  toolIntroBubble: {
-    position: "absolute",
-    bottom: "100%",
-    left: "50%",
-    transform: "translateX(-50%)",
-    marginBottom: 8,
-    width: 132,
-    background: "#2B2A28",
-    color: "#F3EEE1",
-    borderRadius: 6,
-    padding: "8px 10px",
-    fontSize: 11,
-    lineHeight: 1.4,
-    fontFamily: "'Noto Serif TC', serif",
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 6,
-    zIndex: 5,
-    boxShadow: "0 8px 20px rgba(43,42,40,0.3)",
-  },
-  toolIntroClose: {
-    background: "transparent",
-    border: "none",
-    color: "#B8925A",
-    fontSize: 13,
-    lineHeight: 1,
-    cursor: "pointer",
-    padding: 0,
   },
   bottomRow: {
     marginTop: 20,

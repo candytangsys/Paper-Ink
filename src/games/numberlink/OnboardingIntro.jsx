@@ -25,14 +25,17 @@ import { inkTrailColor } from "../../theme.jsx";
 // Demo path for the mini 2×2 board: (0,0)→(0,1)→(1,0)→(1,1), i.e. right,
 // then diagonal, then right again — deliberately includes one diagonal
 // step so "8 directions" isn't just claimed in text but actually shown.
-const NODE_CELLS = [
+// Exported (along with useReducedMotion/useLoopingFrames/MiniGrid below) so
+// ToolIntroModal.jsx's per-tool demos can reuse the same mini-board look
+// instead of re-implementing it.
+export const NODE_CELLS = [
   [0, 0],
   [0, 1],
   [1, 0],
   [1, 1],
 ];
 
-function useReducedMotion() {
+export function useReducedMotion() {
   return useMemo(
     () => typeof window !== "undefined" && !!window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     []
@@ -44,7 +47,7 @@ function useReducedMotion() {
 // setTimeout rather than a fixed-interval setInterval so uneven per-frame
 // dwell times (a long "celebrate" pause vs. a quick reset) just work. Frozen
 // on frame 0 when `enabled` is false (prefers-reduced-motion).
-function useLoopingFrames(frames, enabled) {
+export function useLoopingFrames(frames, enabled) {
   const [index, setIndex] = useState(0);
   useEffect(() => {
     if (!enabled) return undefined;
@@ -68,9 +71,25 @@ function useLoopingFrames(frames, enabled) {
   return frames[enabled ? index : frames.length - 1];
 }
 
+// Non-path cell looks a tool demo can stamp onto an individual NODE_CELLS
+// index via MiniGrid's `overrides` prop — mirrors the real per-tool cell
+// styling in Board.jsx (revealed/suggested/preview/hammerTarget) so
+// ToolIntroModal.jsx's demos read as "the real thing," not an abstraction.
+export const DEMO_VARIANT_STYLE = {
+  clue: { bg: "#E7DBBF", border: "1.5px solid rgba(43,42,40,0.5)", color: "#2B2A28", ring: "none" },
+  revealed: { bg: "rgba(91,124,153,0.14)", border: "1.5px dashed rgba(91,124,153,0.75)", color: "#3F5A73", ring: "none" },
+  suggested: { bg: "rgba(178,58,46,0.14)", border: "2px solid #B23A2E", color: "#B23A2E", ring: "0 0 0 4px rgba(178,58,46,0.2)" },
+  preview: { bg: "rgba(139,92,157,0.32)", border: "2px dashed rgba(139,92,157,0.95)", color: "#5A3C66", ring: "0 0 0 4px rgba(139,92,157,0.22)" },
+  hammerTarget: { bg: "#E7DBBF", border: "2px dashed #8B6A32", color: "#8B6A32", ring: "0 0 0 3px rgba(139,106,50,0.2)" },
+};
+
 // The animated 2×2 board shared by the "connect", "undo/retry", and
 // "auto-hint" steps — only the frame script driving it differs.
-function MiniGrid({ filledCount, ringIndex, celebrate }) {
+// `overrides`: optional { [cellIndex]: { variant, label } } for cells that
+// need a special (non filled/blank) look this frame — see
+// DEMO_VARIANT_STYLE above. Added for ToolIntroModal.jsx; existing callers
+// that never pass it are unaffected.
+export function MiniGrid({ filledCount, ringIndex, celebrate, overrides }) {
   const { cellSize, gap, pad, boardPx } = boardMetrics(2);
   const centerOf = (idx) => {
     const [r, c] = NODE_CELLS[idx];
@@ -99,13 +118,15 @@ function MiniGrid({ filledCount, ringIndex, celebrate }) {
         })}
       </svg>
       {NODE_CELLS.map((cell, idx) => {
-        const filled = idx < filledCount;
+        const override = overrides && overrides[idx];
+        const variantStyle = override ? DEMO_VARIANT_STYLE[override.variant] : null;
+        const filled = idx < filledCount && !override;
         const isRing = ringIndex === idx;
         const { x, y } = centerOf(idx);
         return (
           <div
             key={idx}
-            className={isRing ? "ink-pulse" : ""}
+            className={isRing || override ? "ink-pulse" : ""}
             style={{
               position: "absolute",
               left: x - cellSize / 2,
@@ -117,16 +138,16 @@ function MiniGrid({ filledCount, ringIndex, celebrate }) {
               alignItems: "center",
               justifyContent: "center",
               fontFamily: "'EB Garamond', 'Noto Serif TC', serif",
-              fontWeight: 600,
+              fontWeight: variantStyle ? 700 : 600,
               fontSize: 18,
-              background: filled ? inkTrailColor(idx / 3) : "#EBE3D0",
-              color: filled ? "#F3EEE1" : "#B7AC96",
-              border: filled ? "1px solid rgba(243,238,225,0.55)" : "1px solid rgba(43,42,40,0.16)",
-              boxShadow: isRing ? "0 0 0 4px rgba(178,58,46,0.35)" : "none",
+              background: variantStyle ? variantStyle.bg : filled ? inkTrailColor(idx / 3) : "#EBE3D0",
+              color: variantStyle ? variantStyle.color : filled ? "#F3EEE1" : "#B7AC96",
+              border: variantStyle ? variantStyle.border : filled ? "1px solid rgba(243,238,225,0.55)" : "1px solid rgba(43,42,40,0.16)",
+              boxShadow: variantStyle ? variantStyle.ring : isRing ? "0 0 0 4px rgba(178,58,46,0.35)" : "none",
               transition: "background 0.35s ease, color 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease",
             }}
           >
-            {filled ? idx + 1 : ""}
+            {override ? (override.label ?? "") : filled ? idx + 1 : ""}
           </div>
         );
       })}

@@ -309,11 +309,15 @@ export default function Board({
           } else if (isPreview) {
             // 引路符 — up to 3 upcoming cells, fading with distance so it
             // reads as a route shape, not an exact-number spoiler like 放大鏡.
+            // v3.7: bumped up across the board (fill/border/ring opacity all
+            // raised) after feedback that the original tones read as too
+            // faint to notice against the board.
             const strength = 1 - previewIndex * 0.3;
-            bg = `rgba(139,92,157,${(0.16 * strength).toFixed(3)})`;
-            border = `1.5px dashed rgba(139,92,157,${(0.7 * strength).toFixed(3)})`;
+            bg = `rgba(139,92,157,${(0.32 * strength).toFixed(3)})`;
+            border = `2px dashed rgba(139,92,157,${(0.95 * strength).toFixed(3)})`;
             color = "#5A3C66";
-            fontWeight = 600;
+            fontWeight = 700;
+            boxShadow = `0 0 0 4px rgba(139,92,157,${(0.22 * strength).toFixed(3)})`;
           } else if (isHammerable) {
             // 錘子 targeting mode — an amber ring on the clue cells that can
             // actually be hammered (excludes start/end), distinct from the

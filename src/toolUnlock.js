@@ -46,7 +46,7 @@ export function unlockViaAd(confirmMessage) {
 }
 
 // v3.4/v3.6: repeatedly buying the *same* tool with points makes its next
-// point-purchase cost more (+30% of its base cost per prior purchase, per
+// point-purchase cost more (+50% of its base cost per prior purchase, per
 // tool — buying 放大鏡 a lot doesn't raise 溯源符's price). Nudges players
 // toward spreading spend across tools or watching an ad occasionally instead
 // of point-buying one favorite tool indefinitely at a flat price. Watching
@@ -57,8 +57,11 @@ export function unlockViaAd(confirmMessage) {
 // player-initiated reset (resetEscalationViaAd/resetEscalationViaPoints,
 // below) — the player decides when the markup is worth clearing, rather
 // than waiting out the calendar.
+//
+// v3.7: bumped from +30% to +50% per purchase — the gap between consecutive
+// point-buys felt too shallow.
 const PURCHASE_KEY = "tool_purchase_counts_v1";
-const COST_GROWTH_PER_PURCHASE = 0.3;
+const COST_GROWTH_PER_PURCHASE = 0.5;
 // A price reset costs 5x the tool's *current* (already-escalated) price —
 // deliberately steep, so it's only worth it once escalation has piled up
 // several purchases deep, not as a routine alternative to just buying at

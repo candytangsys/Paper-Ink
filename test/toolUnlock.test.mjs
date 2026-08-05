@@ -19,10 +19,10 @@ test("getToolCost escalates per tool as it's repeatedly bought, independent of o
 
   unlockViaPoints("magnifier", 10); // costs 10, count -> 1
   assert.equal(getToolPurchaseCount("magnifier"), 1);
-  assert.equal(getToolCost(10, "magnifier"), 13); // +30% of base per prior purchase
+  assert.equal(getToolCost(10, "magnifier"), 15); // +50% of base per prior purchase
 
-  unlockViaPoints("magnifier", 10); // costs 13, count -> 2
-  assert.equal(getToolCost(10, "magnifier"), 16);
+  unlockViaPoints("magnifier", 10); // costs 15, count -> 2
+  assert.equal(getToolCost(10, "magnifier"), 20);
 
   // A different tool's cost is unaffected by magnifier's purchases.
   assert.equal(getToolCost(25, "rootCause"), 25);
@@ -33,9 +33,9 @@ test("unlockViaPoints spends the escalated cost, not the base cost, and only bum
   const { unlockViaPoints } = await import(`../src/toolUnlock.js?t=${Date.now()}`);
   const { addPoints, getPointsBalance } = await import(`../src/pointsWallet.js?t=${Date.now()}`);
 
-  addPoints(11); // enough for the base cost (10) but not a second escalated purchase (12)
+  addPoints(11); // enough for the base cost (10) but not a second escalated purchase (15)
   assert.equal(unlockViaPoints("magnifier", 10), true);
   assert.equal(getPointsBalance(), 1);
-  assert.equal(unlockViaPoints("magnifier", 10), false); // needs 12 now, only has 1
+  assert.equal(unlockViaPoints("magnifier", 10), false); // needs 15 now, only has 1
   assert.equal(getPointsBalance(), 1); // failed spend leaves balance untouched
 });

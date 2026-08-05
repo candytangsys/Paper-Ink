@@ -327,21 +327,28 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
       const [hr, hc] = order[order.length - 1];
       if (hr === r && hc === c) return; // already the head, ignore
 
-      // sliding back onto the previous circle retracts, no penalty
-      if (order.length >= 2) {
-        const [pr, pc] = order[order.length - 2];
-        if (pr === r && pc === c) {
-          setPath(order.slice(0, -1));
-          return;
+      // Tapping any already-filled number (v3.7) jumps the path straight
+      // back to end there — a one-click alternative to hitting 回退
+      // repeatedly. Same "no penalty, doesn't count as a hint tool" as
+      // undo: free, no mistake, no usedToolRef. Works during a drag stroke
+      // too, since Board.jsx's drag handler re-invokes this per cell
+      // entered. Subsumes the old "slide back onto the previous circle"
+      // special case (that's just filledIdx === order.length - 2).
+      const filledIdx = order.findIndex(([fr, fc]) => fr === r && fc === c);
+      if (filledIdx !== -1) {
+        if (!previousPathTakenRef.current) {
+          previousPathTakenRef.current = true;
+          setPreviousPath(order.slice());
         }
+        setPath(order.slice(0, filledIdx + 1));
+        return;
       }
 
       const adjacent = Math.max(Math.abs(hr - r), Math.abs(hc - c)) === 1;
-      const already = order.some(([fr, fc]) => fr === r && fc === c);
       const nextNum = order.length + 1;
       const clueVal = puzzle.clueMap[key];
 
-      if (!adjacent || already || (clueVal !== undefined && clueVal !== nextNum)) {
+      if (!adjacent || (clueVal !== undefined && clueVal !== nextNum)) {
         setMistakes((m) => m + 1);
         triggerShake(key);
         return;
