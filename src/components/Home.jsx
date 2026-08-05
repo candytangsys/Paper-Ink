@@ -230,7 +230,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: "56px 22px 0",
+    padding: "24px 22px 0",
   },
   brandmark: { display: "flex", alignItems: "center", gap: 9 },
   sealDot: {
