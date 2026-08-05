@@ -6,7 +6,7 @@ import { track } from "../analytics.js";
 // Web Share API (with the Canvas image attached) first, falling back to a
 // clipboard copy of the text + link when the platform can't share files —
 // or has no Web Share API at all (most desktop browsers).
-export async function shareDaily({ date, size, timeSec, perfect, streak, solution, lang }) {
+export async function shareDaily({ date, size, timeSec, perfect, streak, score, solution, lang }) {
   const refId = createRefIdStore(window.localStorage).getOrCreate();
   const baseUrl = `${window.location.origin}${import.meta.env.BASE_URL}`;
   const url = buildShareUrl({ baseUrl, date, refId });
@@ -14,7 +14,7 @@ export async function shareDaily({ date, size, timeSec, perfect, streak, solutio
 
   let file = null;
   try {
-    const blob = await renderShareImage({ size, timeSec, perfect, streak, solution, lang });
+    const blob = await renderShareImage({ size, timeSec, perfect, streak, score, solution, lang });
     if (blob) file = new File([blob], "paper-ink-daily.png", { type: "image/png" });
   } catch {
     /* canvas unavailable, share text-only */

@@ -2,22 +2,69 @@ import { COLORS, inkTrailColor } from "../theme.jsx";
 import { fmtTime } from "../engine/share.mjs";
 
 const WIDTH = 1080;
-const HEIGHT = 1350;
+// v3.9: +100 over the original 1350 to make room for the score/streak
+// badge row (drawStatBadge) added below the path thumbnail — without the
+// extra height, the perfect-run stamp's fixed bottom-right position would
+// overlap the badges whenever both are showing at once (i.e. any perfect
+// run with a streak ≥2, not an edge case).
+const HEIGHT = 1450;
 
 const SHARE_TEXT = {
   zh: {
     brand: "紙墨筆・一筆連",
     daily: "每日挑戰",
     perfect: "完",
-    streak: (n) => `連續 ${n} 天`,
+    streakLabel: "連續天數",
+    scoreLabel: "積分",
   },
   en: {
     brand: "Paper & Ink",
     daily: "One-Stroke Daily",
     perfect: "PERFECT",
-    streak: (n) => `${n}-day streak`,
+    streakLabel: "Streak",
+    scoreLabel: "Points",
   },
 };
+
+// v3.9: the abstract path thumbnail stays deliberately illegible (see
+// drawPathThumb below — anti-spoiler, not a bug), so it doesn't read as much
+// of an achievement on its own. These badge pills are what actually carry
+// the "worth sharing" signal now — score and streak, styled to pop rather
+// than sitting as small plain text.
+function drawRoundedRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+// A stat "badge": small uppercase label on top, big bold value below,
+// inside a rounded pill — cx is the pill's horizontal center.
+function drawStatBadge(ctx, { cx, y, w, h, accent, label, value }) {
+  const x = cx - w / 2;
+  drawRoundedRect(ctx, x, y, w, h, h / 2);
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.fill();
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  ctx.fillStyle = accent;
+  ctx.font = "600 22px 'EB Garamond', serif";
+  ctx.textAlign = "center";
+  ctx.fillText(label.toUpperCase(), cx, y + 34);
+
+  ctx.fillStyle = COLORS.ink;
+  ctx.font = "700 46px 'Noto Serif TC', serif";
+  ctx.fillText(value, cx, y + h - 20);
+}
 
 // Draws only the *shape* of the solved path — no numbers, no clue
 // positions — so the image can never leak the answer to a puzzle that
@@ -65,7 +112,7 @@ function drawPerfectStamp(ctx, label) {
   const y = -h / 2;
 
   ctx.save();
-  ctx.translate(WIDTH - 190, HEIGHT - 260);
+  ctx.translate(WIDTH - 190, HEIGHT - 95);
   const tiltDeg = STAMP_TILT_MIN_DEG + Math.random() * (STAMP_TILT_MAX_DEG - STAMP_TILT_MIN_DEG);
   const sign = Math.random() < 0.5 ? -1 : 1;
   ctx.rotate((sign * tiltDeg * Math.PI) / 180);
@@ -92,7 +139,7 @@ function drawPerfectStamp(ctx, label) {
   ctx.restore();
 }
 
-export async function renderShareImage({ size, timeSec, perfect, streak, solution, lang = "zh" }) {
+export async function renderShareImage({ size, timeSec, perfect, streak, score, solution, lang = "zh" }) {
   const T = SHARE_TEXT[lang];
   const canvas = document.createElement("canvas");
   canvas.width = WIDTH;
@@ -134,15 +181,29 @@ export async function renderShareImage({ size, timeSec, perfect, streak, solutio
   const boxSize = WIDTH * 0.62;
   drawPathThumb(ctx, solution, size, { x: (WIDTH - boxSize) / 2, y: 340, w: boxSize, h: boxSize });
 
-  // stats row
+  // stats row (small, informational — size/time)
   ctx.fillStyle = COLORS.inkSoft;
   ctx.font = "500 40px 'Noto Serif TC', serif";
   ctx.fillText(`${size}×${size}　·　${fmtTime(timeSec)}`, WIDTH / 2, 340 + boxSize + 80);
 
-  if (streak >= 2) {
-    ctx.fillStyle = COLORS.ochre;
-    ctx.font = "600 38px 'Noto Serif TC', serif";
-    ctx.fillText(`🔥 ${T.streak(streak)}`, WIDTH / 2, 340 + boxSize + 140);
+  // badge row (the actual "worth sharing" signal — score always, streak
+  // once it's ≥2) — sized/positioned as a pair when both are present, or
+  // a single centered badge when streak isn't shown yet.
+  const badges = [];
+  if (score != null) badges.push({ accent: COLORS.vermillion, label: T.scoreLabel, value: String(score) });
+  if (streak >= 2) badges.push({ accent: COLORS.ochre, label: T.streakLabel, value: `🔥 ${streak}` });
+
+  if (badges.length) {
+    const badgeW = 320;
+    const badgeH = 130;
+    const gap = 36;
+    const totalW = badges.length * badgeW + (badges.length - 1) * gap;
+    let cx = WIDTH / 2 - totalW / 2 + badgeW / 2;
+    const y = 340 + boxSize + 120;
+    for (const b of badges) {
+      drawStatBadge(ctx, { cx, y, w: badgeW, h: badgeH, ...b });
+      cx += badgeW + gap;
+    }
   }
 
   if (perfect) drawPerfectStamp(ctx, T.perfect);

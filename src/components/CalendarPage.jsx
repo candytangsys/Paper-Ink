@@ -246,7 +246,7 @@ const styles = {
     zIndex: 1,
     width: "100%",
     maxWidth: 480,
-    padding: "56px 16px 40px",
+    padding: "72px 16px 40px",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",

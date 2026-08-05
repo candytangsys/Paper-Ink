@@ -114,6 +114,48 @@ export default function Board({
     wonRef.current = won;
   }, [won]);
 
+  // v3.9: a second finger touching down anywhere on the page — not just on
+  // the board — usually means the player is pinch-zooming the page, not
+  // drawing. Without this, that second touch (or the resulting jump in
+  // pointer position) could get read as a stray tap/drag on the board and
+  // register as a mistake. Tracked in the capture phase so this always runs
+  // before the board's own (bubble-phase) pointer handlers below, and
+  // globally (on window) since the second finger doesn't have to land on
+  // the board itself to be part of the same pinch gesture. Once a gesture
+  // goes multi-touch it stays suspended until every finger lifts — even if
+  // it drops back to one finger mid-pinch, that finger's continued
+  // movement is still part of the zoom, not a fresh, deliberate stroke.
+  const activePointerIdsRef = useRef(new Set());
+  const multiTouchRef = useRef(false);
+
+  useEffect(() => {
+    const onDown = (e) => {
+      activePointerIdsRef.current.add(e.pointerId);
+      if (activePointerIdsRef.current.size > 1) {
+        multiTouchRef.current = true;
+        // Cancel any single-finger drag already in progress on the board —
+        // the second finger just arrived, so whatever was happening before
+        // is no longer a solo stroke.
+        headCellRef.current = null;
+        moveOriginRef.current = null;
+        setDragging(false);
+        setDragPos(null);
+      }
+    };
+    const onUpOrCancel = (e) => {
+      activePointerIdsRef.current.delete(e.pointerId);
+      if (activePointerIdsRef.current.size === 0) multiTouchRef.current = false;
+    };
+    window.addEventListener("pointerdown", onDown, { capture: true, passive: true });
+    window.addEventListener("pointerup", onUpOrCancel, { capture: true, passive: true });
+    window.addEventListener("pointercancel", onUpOrCancel, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", onDown, { capture: true });
+      window.removeEventListener("pointerup", onUpOrCancel, { capture: true });
+      window.removeEventListener("pointercancel", onUpOrCancel, { capture: true });
+    };
+  }, []);
+
   // Shrinks the board's own metrics (not a CSS transform) so it always
   // renders fully within its container's width — no scrolling, panning, or
   // zoom controls needed. Re-measured on mount/size change and on window
@@ -150,7 +192,7 @@ export default function Board({
   };
 
   const handlePointerDown = (e) => {
-    if (wonRef.current || !boardRef.current) return;
+    if (wonRef.current || !boardRef.current || multiTouchRef.current) return;
     const { x, y } = localPoint(e);
     const cell = cellAtLocal(x, y);
     if (!cell) return;
@@ -188,7 +230,7 @@ export default function Board({
     if (!dragging) return undefined;
 
     const onMove = (e) => {
-      if (!boardRef.current) return;
+      if (!boardRef.current || multiTouchRef.current) return;
       const rect = boardRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;

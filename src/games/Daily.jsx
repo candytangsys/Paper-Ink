@@ -367,6 +367,7 @@ export default function Daily({ date, onExit }) {
       timeSec: entry.timeSec,
       perfect: entry.perfect,
       streak: streakStatus.streak,
+      score: entry.score,
       solution: puzzle.path,
       lang,
     });
@@ -666,7 +667,7 @@ const styles = {
     zIndex: 1,
     width: "100%",
     maxWidth: 560,
-    padding: "56px 10px 40px",
+    padding: "72px 10px 40px",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",

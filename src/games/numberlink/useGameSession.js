@@ -35,6 +35,11 @@ const FREEZE_REFUND_SEC = 15;
 // 引路符 (v3.2): how many upcoming cells to preview at once.
 const PREVIEW_LOOKAHEAD = 3;
 
+// 路線記憶 (v3.9): how long the ghost reference line stays before
+// auto-dismissing on its own, if the player hasn't already caught back up
+// past it first.
+const GHOST_PATH_TIMEOUT_MS = 10000;
+
 // Given the player's current (possibly off-solution) path, searches for
 // *any* legal way to fill the rest of the board — not just the original
 // canonical `puzzle.path` — so hint stays correct even after the player
@@ -170,10 +175,21 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
   // undo/restart *this attempt* — a faint reference ghost so they can see
   // where they got to before backing out. Only the first regression each
   // attempt takes the snapshot (repeated undos afterward don't keep
-  // overwriting it down to nothing); cleared on start()/restart() of a new
-  // attempt, shown until the puzzle is won.
+  // overwriting it down to nothing).
+  //
+  // v3.9: no longer lingers for the rest of the whole attempt — it now
+  // clears itself as soon as either condition is true: the player has
+  // refilled back past where the ghost was (it's no longer useful
+  // reference at that point), or GHOST_PATH_TIMEOUT_MS has passed since it
+  // was taken (so it doesn't just sit there indefinitely if they wander
+  // off in a different direction instead of retracing it).
   const [previousPath, setPreviousPath] = useState(null); // [[r,c], ...] | null
+  // Mirrors `previousPath` synchronously — state updates are async, but
+  // setPath() (below) needs to read the just-taken snapshot in the same
+  // tick it was set (undo() sets both in one call).
+  const previousPathRef = useRef(null);
   const previousPathTakenRef = useRef(false);
+  const ghostTimeoutRef = useRef(null);
   const timerRef = useRef(null);
   const puzzleRef = useRef(null);
   // Idle-triggered stuck check (v3.3) — stuckTimerRef holds the pending
@@ -202,17 +218,55 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
     return s;
   }, [filledOrder]);
 
-  const setPath = useCallback((next) => {
-    pathRef.current = next;
-    setFilledOrder(next);
-    setRevealedCell(null);
-    setRootCause(null);
-    setPreviewCells([]);
-    // Every path mutation (advance or retract) invalidates any stuck
-    // reminder shown for the *previous* position — it'll be re-evaluated
-    // fresh after the next pause via scheduleStuckCheck().
-    setStuckBannerVisible(false);
+  const clearGhostPath = useCallback(() => {
+    previousPathRef.current = null;
+    previousPathTakenRef.current = false;
+    setPreviousPath(null);
+    if (ghostTimeoutRef.current) {
+      clearTimeout(ghostTimeoutRef.current);
+      ghostTimeoutRef.current = null;
+    }
   }, []);
+
+  const takeGhostSnapshot = useCallback((order) => {
+    previousPathRef.current = order;
+    previousPathTakenRef.current = true;
+    setPreviousPath(order);
+    if (ghostTimeoutRef.current) clearTimeout(ghostTimeoutRef.current);
+    ghostTimeoutRef.current = setTimeout(() => {
+      ghostTimeoutRef.current = null;
+      previousPathRef.current = null;
+      previousPathTakenRef.current = false;
+      setPreviousPath(null);
+    }, GHOST_PATH_TIMEOUT_MS);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (ghostTimeoutRef.current) clearTimeout(ghostTimeoutRef.current);
+    };
+  }, []);
+
+  const setPath = useCallback(
+    (next) => {
+      pathRef.current = next;
+      setFilledOrder(next);
+      setRevealedCell(null);
+      setRootCause(null);
+      setPreviewCells([]);
+      // Every path mutation (advance or retract) invalidates any stuck
+      // reminder shown for the *previous* position — it'll be re-evaluated
+      // fresh after the next pause via scheduleStuckCheck().
+      setStuckBannerVisible(false);
+      // v3.9: caught back up to (or past) where the ghost was taken —
+      // it's served its purpose, dismiss it early instead of waiting out
+      // GHOST_PATH_TIMEOUT_MS.
+      if (previousPathRef.current && next.length >= previousPathRef.current.length) {
+        clearGhostPath();
+      }
+    },
+    [clearGhostPath]
+  );
 
   const clearStuckTimer = useCallback(() => {
     if (stuckTimerRef.current) {
@@ -252,14 +306,13 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
     setRootCause(null);
     setPreviewCells([]);
     setStuckBannerVisible(false);
-    setPreviousPath(null);
-    previousPathTakenRef.current = false;
+    clearGhostPath();
     wonRef.current = false;
     setWon(false);
     setStarted(false);
     usedToolRef.current = false;
     clearStuckTimer(); // not (re)started until the player's first tap
-  }, [clearStuckTimer]);
+  }, [clearStuckTimer, clearGhostPath]);
 
   // Resets progress on the *same* puzzle instance (no regeneration) — used
   // by "play again"/"retry" so a retry is actually a retry, not a new
@@ -270,16 +323,13 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
   const restart = useCallback(() => {
     if (!puzzleRef.current) return;
     const ghost = previousPathTakenRef.current
-      ? previousPath
+      ? previousPathRef.current
       : pathRef.current.length > 0
       ? pathRef.current.slice()
       : null;
     start(puzzleRef.current);
-    if (ghost) {
-      previousPathTakenRef.current = true;
-      setPreviousPath(ghost);
-    }
-  }, [start, previousPath]);
+    if (ghost) takeGhostSnapshot(ghost);
+  }, [start, takeGhostSnapshot]);
 
   /* timer */
   useEffect(() => {
@@ -349,10 +399,7 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
       // special case (that's just filledIdx === order.length - 2).
       const filledIdx = order.findIndex(([fr, fc]) => fr === r && fc === c);
       if (filledIdx !== -1) {
-        if (!previousPathTakenRef.current) {
-          previousPathTakenRef.current = true;
-          setPreviousPath(order.slice());
-        }
+        if (!previousPathTakenRef.current) takeGhostSnapshot(order.slice());
         setPath(order.slice(0, filledIdx + 1));
         return true;
       }
@@ -373,7 +420,7 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
       if (next.length === puzzle.total) handleWin();
       return true;
     },
-    [setPath, triggerShake, handleWin, scheduleStuckCheck]
+    [setPath, triggerShake, handleWin, scheduleStuckCheck, takeGhostSnapshot]
   );
 
   const undo = useCallback(() => {
@@ -381,13 +428,12 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
     const order = pathRef.current;
     if (order.length === 0) return;
     if (!previousPathTakenRef.current) {
-      previousPathTakenRef.current = true;
-      setPreviousPath(order.slice());
+      takeGhostSnapshot(order.slice());
     }
     scheduleStuckCheck();
     setPath(order.slice(0, -1));
     onUndoUsedRef.current && onUndoUsedRef.current();
-  }, [setPath, scheduleStuckCheck]);
+  }, [setPath, scheduleStuckCheck, takeGhostSnapshot]);
 
   // Magnifier (v3.1 §一之3): reveal the correct number for *any* tapped
   // cell, not just the next one in sequence — doesn't auto-place it, same
