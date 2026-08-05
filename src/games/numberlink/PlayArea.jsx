@@ -489,15 +489,17 @@ const styles = {
   },
   toolRow: {
     width: "100%",
-    display: "flex",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 8,
+    display: "grid",
+    // Always exactly one row of 6, evenly shrinking to fit the container
+    // instead of flex-wrapping — a wrap left an orphaned single button
+    // stranded alone on its own second row on narrower phones.
+    gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+    gap: 6,
     marginTop: 4,
   },
   toolSlot: {
     position: "relative",
-    width: 64,
+    minWidth: 0,
   },
   startHint: {
     marginBottom: 12,
