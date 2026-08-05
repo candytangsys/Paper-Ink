@@ -9,7 +9,7 @@ import ScoreBreakdown from "./numberlink/ScoreBreakdown.jsx";
 import { shareLevel } from "./numberlink/levelShareFlow.js";
 import { fmtTime } from "../engine/share.mjs";
 import { generateHamiltonianPath, pickClueIndices, hasDiagonalStep } from "../engine/hamiltonian.mjs";
-import { CHAPTERS, CHAPTER_MILESTONE, DIAGONAL_FORCED_SIZES, clueRatioForClear, nextChapterSize } from "../engine/chapters.mjs";
+import { CHAPTERS, chapterUnlockThreshold, chapterIndexOf, DIAGONAL_FORCED_SIZES, clueRatioForClear, nextChapterSize } from "../engine/chapters.mjs";
 import { parTimeSec, computeScore } from "../engine/score.mjs";
 import { getChapterEntry, isChapterUnlocked, recordChapterClear, willHitMilestoneOnNextClear, highestUnlockedChapterIndex } from "../chapterProgress.js";
 import { TOOL_UNLOCK_CHAPTER_INDEX } from "../toolUnlock.js";
@@ -42,6 +42,8 @@ const TEXT = {
     scoreAccuracy: "準確度",
     scoreNoHint: "無提示",
     scoreMilestone: "里程碑",
+    scoreDifficulty: "難度加成",
+    scoreStarter: "新手加成",
     scoreTotal: "本關積分",
     scoreBalance: (gain, balance) => `本關 +${gain} 分，目前總分 ${balance}`,
     share: "分享成績",
@@ -68,6 +70,8 @@ const TEXT = {
     scoreAccuracy: "Accuracy",
     scoreNoHint: "No hint",
     scoreMilestone: "Milestone",
+    scoreDifficulty: "Difficulty",
+    scoreStarter: "Starter bonus",
     scoreTotal: "Score",
     scoreBalance: (gain, balance) => `+${gain} this level, ${balance} total`,
     share: "Share result",
@@ -88,9 +92,10 @@ const TEXT = {
    (小關卡) inside each — there's no fixed level count anymore.
    Clue density decreases with each chapter clear (see
    engine/chapters.mjs) until a floor is reached at
-   CHAPTER_MILESTONE clears, which is also when the next
-   chapter unlocks. "第幾關" is just a clear-count display,
-   not a stable level identity.
+   CLUE_RAMP_CLEARS clears. The next chapter unlocks separately,
+   at chapterUnlockThreshold(size) clears (v3.8: grows per
+   chapter instead of a flat count). "第幾關" is just a
+   clear-count display, not a stable level identity.
 
    v3.2: play surface (board + tools + undo/retry) is now the
    shared PlayArea component, unified with Daily.jsx. The old
@@ -168,15 +173,22 @@ export default function NumberLink({ onExit, initialSize = null }) {
     const { size, clueRatio } = puzzleMetaRef.current;
     const par = parTimeSec(size, clueRatio);
     const justHitMilestone = willHitMilestoneOnNextClear(size);
+    const chapterIdx = chapterIndexOf(size);
+    const unlockThreshold = chapterUnlockThreshold(size);
+    // Needed before recordChapterClear() below (which itself needs
+    // score.total, so it can't run first) — recordChapterClear will derive
+    // the identical value as its own returned chapterClearCount.
+    const clearIndexInChapter = getChapterEntry(size).chapterClearCount + 1;
     const score = computeScore({
       timeSec: finalTime, parTimeSec: par, mistakes: finalMistakes, usedTool, justHitMilestone,
+      chapterIndex: chapterIdx, clearIndexInChapter, chapterUnlockThreshold: unlockThreshold,
     });
     const { chapterClearCount: newCount } = recordChapterClear(size, score.total);
-    // Chapter-unlock event (7 clears) is independent of the score-bonus
-    // milestone (every 10 clears, see justHitMilestone above) — conflating
-    // the two used to delay the "next chapter unlocked" prompt until the
-    // 10th clear even though isChapterUnlocked() already flips at the 7th.
-    const chapterJustUnlocked = newCount === CHAPTER_MILESTONE;
+    // Chapter-unlock event is independent of the score-bonus milestone
+    // (every 10 clears, see justHitMilestone above) — conflating the two
+    // used to delay the "next chapter unlocked" prompt past when
+    // isChapterUnlocked() actually flips.
+    const chapterJustUnlocked = newCount === unlockThreshold;
     recordLevelHistoryEntry({
       size,
       chapterClearIndex: newCount,
@@ -359,8 +371,9 @@ function GameScreen({
               compact
               labels={{
                 base: t.scoreBase, time: t.scoreTime, accuracy: t.scoreAccuracy,
-                noHint: t.scoreNoHint, milestone: t.scoreMilestone, total: t.scoreTotal,
-                balance: t.scoreBalance,
+                noHint: t.scoreNoHint, milestone: t.scoreMilestone,
+                difficulty: t.scoreDifficulty, starter: t.scoreStarter,
+                total: t.scoreTotal, balance: t.scoreBalance,
               }}
             />
             {bestScore != null && <div style={styles.winBest}>{t.bestScore(bestScore)}</div>}

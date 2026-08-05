@@ -13,6 +13,7 @@ import {
 } from "../../toolUnlock.js";
 import { hasSeenToolIntro, markToolIntroSeen } from "../../toolIntroSeen.js";
 import { bumpUndoRestartUsage } from "../../undoRestartAdCounter.js";
+import { bumpRetryUsage } from "../../retryAdCounter.js";
 import { showInterstitialIfConsented } from "../../interstitialAd.js";
 import { track } from "../../analytics.js";
 import { isDesktopViewport } from "../../deviceUtil.js";
@@ -261,6 +262,10 @@ export default function PlayArea({
   const handleRestartClick = useCallback(() => {
     (onRestart || restart)();
     bumpAndMaybeShowAd();
+    // v3.8: 重來 additionally has its own every-3rd-use ad cadence, on top
+    // of (not instead of) the shared every-5th-回退/重來 counter above —
+    // see retryAdCounter.js for why these are two separate counters.
+    if (bumpRetryUsage()) showInterstitialIfConsented({ trigger: "retry" });
   }, [onRestart, restart, bumpAndMaybeShowAd]);
 
   const dismissToolIntro = useCallback((toolKey) => {

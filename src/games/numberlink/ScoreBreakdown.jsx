@@ -22,6 +22,8 @@ export default function ScoreBreakdown({ score, labels, pointsBalance, compact =
     breakdown.accuracy > 0 && `${labels.accuracy} +${breakdown.accuracy}`,
     breakdown.noHint > 0 && `${labels.noHint} +${breakdown.noHint}`,
     breakdown.milestone > 0 && `${labels.milestone} +${breakdown.milestone}`,
+    breakdown.difficulty > 0 && `${labels.difficulty} +${breakdown.difficulty}`,
+    breakdown.starter > 0 && `${labels.starter} +${breakdown.starter}`,
   ].filter(Boolean);
 
   return (

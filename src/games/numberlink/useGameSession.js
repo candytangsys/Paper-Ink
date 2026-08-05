@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { startPlaytimeAdTimer } from "../../playtimeAdTimer.js";
 
 /* ---------------------------------------------------------
    Shared one-stroke-path session state: filled path, taps,
@@ -147,6 +148,12 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
   const [elapsed, setElapsed] = useState(0);
   const [won, setWon] = useState(false);
   const wonRef = useRef(false);
+  // v3.8: the elapsed timer no longer runs while the player is still just
+  // looking at the board — it only starts once they actually tap "1".
+  // Stays true through any later undo back down to 0 filled cells (the game
+  // has "started" the moment it started, undoing everything doesn't un-start
+  // it); only start()/restart() resets it.
+  const [started, setStarted] = useState(false);
   const [shakeKey, setShakeKey] = useState(null);
   const shakeTimeout = useRef(null);
   // Magnifier (放大鏡, v3.1 §一之3): revealed number for an arbitrary
@@ -249,6 +256,7 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
     previousPathTakenRef.current = false;
     wonRef.current = false;
     setWon(false);
+    setStarted(false);
     usedToolRef.current = false;
     clearStuckTimer(); // not (re)started until the player's first tap
   }, [clearStuckTimer]);
@@ -275,12 +283,12 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
 
   /* timer */
   useEffect(() => {
-    if (puzzle && !won) {
+    if (puzzle && !won && started) {
       timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
       return () => clearInterval(timerRef.current);
     }
     return undefined;
-  }, [puzzle, won]);
+  }, [puzzle, won, started]);
 
   const triggerShake = useCallback((key) => {
     if (shakeTimeout.current) clearTimeout(shakeTimeout.current);
@@ -304,11 +312,14 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
   }, [clearStuckTimer]);
 
   // Advance the path to (r,c) or retract; reads the synchronous pathRef so
-  // rapid drag events never work off stale state.
+  // rapid drag events never work off stale state. Returns whether the tap
+  // was valid (true) or a mistake (false) — Board.jsx's segmented-drag
+  // commit (v3.8) uses this to decide whether its drag anchor should
+  // advance to the attempted cell or stay put.
   const advanceTo = useCallback(
     (r, c) => {
       const puzzle = puzzleRef.current;
-      if (!puzzle || wonRef.current) return;
+      if (!puzzle || wonRef.current) return false;
       scheduleStuckCheck(); // any interaction resets the idle-stuck-check clock
       const order = pathRef.current;
       const key = `${r}_${c}`;
@@ -317,15 +328,17 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
         if (puzzle.clueMap[key] === 1) {
           setPath([[r, c]]);
           setTaps((t) => t + 1);
-        } else {
-          setMistakes((m) => m + 1);
-          triggerShake(key);
+          setStarted(true);
+          startPlaytimeAdTimer();
+          return true;
         }
-        return;
+        setMistakes((m) => m + 1);
+        triggerShake(key);
+        return false;
       }
 
       const [hr, hc] = order[order.length - 1];
-      if (hr === r && hc === c) return; // already the head, ignore
+      if (hr === r && hc === c) return true; // already the head, harmless no-op
 
       // Tapping any already-filled number (v3.7) jumps the path straight
       // back to end there — a one-click alternative to hitting 回退
@@ -341,7 +354,7 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
           setPreviousPath(order.slice());
         }
         setPath(order.slice(0, filledIdx + 1));
-        return;
+        return true;
       }
 
       const adjacent = Math.max(Math.abs(hr - r), Math.abs(hc - c)) === 1;
@@ -351,13 +364,14 @@ export function useGameSession({ onWin, onUndoUsed } = {}) {
       if (!adjacent || (clueVal !== undefined && clueVal !== nextNum)) {
         setMistakes((m) => m + 1);
         triggerShake(key);
-        return;
+        return false;
       }
 
       const next = [...order, [r, c]];
       setPath(next);
       setTaps((t) => t + 1);
       if (next.length === puzzle.total) handleWin();
+      return true;
     },
     [setPath, triggerShake, handleWin, scheduleStuckCheck]
   );

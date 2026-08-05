@@ -22,6 +22,37 @@ export function boardMetrics(n, zoom = 1) {
   return { cellSize, gap, pad, fontSize, boardPx };
 }
 
+// v3.8: drag-to-draw redesign — a continuous stroke used to register a step
+// the instant the pointer merely passed *near* a cell (within a radius
+// bigger than the cell itself), which misfired constantly on diagonal
+// moves where a neighbor's capture radius overlaps the path between two
+// other cells. Now a step only commits once the drag has actually
+// travelled a full cell-pitch *from the current head*, snapped to whichever
+// of the 8 directions it's most aligned with — same "8-direction adjacency"
+// shape as the game rules, just used to gate commits instead of an
+// always-on radius. See handlePointerDown/the pointermove handler below.
+const DIRECTIONS_8 = [
+  { dr: 0, dc: 1 }, { dr: 0, dc: -1 }, { dr: 1, dc: 0 }, { dr: -1, dc: 0 },
+  { dr: 1, dc: 1 }, { dr: 1, dc: -1 }, { dr: -1, dc: 1 }, { dr: -1, dc: -1 },
+];
+
+function snapDirection(dx, dy) {
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  let best = DIRECTIONS_8[0];
+  let bestDot = -Infinity;
+  for (const dir of DIRECTIONS_8) {
+    const dlen = Math.hypot(dir.dc, dir.dr);
+    const dot = (ux * dir.dc + uy * dir.dr) / dlen;
+    if (dot > bestDot) {
+      bestDot = dot;
+      best = dir;
+    }
+  }
+  return best;
+}
+
 export default function Board({
   puzzle,
   filledOrder,
@@ -61,7 +92,16 @@ export default function Board({
 
   const containerRef = useRef(null);
   const boardRef = useRef(null);
-  const lastKeyRef = useRef(null);
+  // Segmented-drag tracking (v3.8): headCellRef is "the cell we compute the
+  // next step's direction from" (mirrors the puzzle's real head, but only
+  // advances on a *successful* commit — a mistake leaves it in place so a
+  // wobble right after a bad guess doesn't immediately retrigger).
+  // moveOriginRef is the pixel point the current segment's drag distance is
+  // measured from — reset to the (possibly unchanged) head's center after
+  // every commit attempt, so each step always needs its own fresh full
+  // cell-pitch of travel.
+  const headCellRef = useRef(null);
+  const moveOriginRef = useRef(null);
   const onCellClickRef = useRef(onCellClick);
   const wonRef = useRef(won);
   const [dragging, setDragging] = useState(false);
@@ -126,10 +166,19 @@ export default function Board({
       onHammerTap && onHammerTap(cell.row, cell.col);
       return;
     }
-    lastKeyRef.current = `${cell.row}_${cell.col}`;
+    const success = onCellClickRef.current(cell.row, cell.col);
+    if (success) {
+      headCellRef.current = cell;
+      moveOriginRef.current = centerOf(cell.row, cell.col);
+    } else {
+      // Mis-tapped the very first cell (or some other invalid press) — not
+      // a valid drag anchor. Movement won't auto-commit anything until the
+      // player lifts and presses again correctly.
+      headCellRef.current = null;
+      moveOriginRef.current = null;
+    }
     setDragPos({ x, y });
     setDragging(true);
-    onCellClickRef.current(cell.row, cell.col);
   };
 
   // Listen on window while dragging so movement is tracked even as the
@@ -144,19 +193,33 @@ export default function Board({
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       setDragPos({ x, y });
-      const cell = cellAtLocal(x, y);
-      if (cell) {
-        const key = `${cell.row}_${cell.col}`;
-        if (key !== lastKeyRef.current) {
-          lastKeyRef.current = key;
-          onCellClickRef.current(cell.row, cell.col);
-        }
-      }
+      if (!headCellRef.current || !moveOriginRef.current) return;
+
+      const dx = x - moveOriginRef.current.x;
+      const dy = y - moveOriginRef.current.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 1) return;
+
+      const dir = snapDirection(dx, dy);
+      // A diagonal neighbor's center is √2× further than an orthogonal
+      // one's — require proportionally more travel so "a full cell's
+      // pull" means the same thing in every direction.
+      const requiredDist = Math.hypot(dir.dc, dir.dr) * (cellSize + GAP);
+      if (dist < requiredDist) return;
+
+      const targetRow = headCellRef.current.row + dir.dr;
+      const targetCol = headCellRef.current.col + dir.dc;
+      if (targetRow < 0 || targetRow >= n || targetCol < 0 || targetCol >= n) return;
+
+      const success = onCellClickRef.current(targetRow, targetCol);
+      if (success) headCellRef.current = { row: targetRow, col: targetCol };
+      moveOriginRef.current = centerOf(headCellRef.current.row, headCellRef.current.col);
     };
     const onUp = () => {
       setDragging(false);
       setDragPos(null);
-      lastKeyRef.current = null;
+      headCellRef.current = null;
+      moveOriginRef.current = null;
     };
 
     window.addEventListener("pointermove", onMove, { passive: true });
@@ -167,7 +230,7 @@ export default function Board({
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [dragging, cellAtLocal]);
+  }, [dragging, n, cellSize, GAP]);
 
   return (
     <div ref={containerRef} style={styles.container}>

@@ -3,7 +3,7 @@ import { Home, Feather, ChevronDown, Lock, Search, Crosshair, Wand2, Route, Snow
 import { COLORS, homeBtnStyle, brandRowStyle, eyebrowStyle } from "../theme.jsx";
 import { useLanguage } from "../i18n.jsx";
 import LangToggle from "./LangToggle.jsx";
-import { CHAPTERS, CHAPTER_MILESTONE, SCORE_MILESTONE_INTERVAL } from "../engine/chapters.mjs";
+import { CHAPTERS, chapterUnlockThreshold, SCORE_MILESTONE_INTERVAL } from "../engine/chapters.mjs";
 import {
   MAGNIFIER_COST, ROOT_CAUSE_COST, RELAY_COST, PREVIEW_COST, FREEZE_COST, HAMMER_COST,
   TOOL_UNLOCK_CHAPTER_INDEX,
@@ -46,7 +46,7 @@ const TEXT = {
         heading: "大關卡與小關卡",
         body: [
           "常規關卡依棋盤大小分成「大關卡」，每個大關卡內的「小關卡」是即時產生、無限的。",
-          `每個大關卡通關 ${CHAPTER_MILESTONE} 次後，線索密度會降到最低（最難），同時解鎖下一個大關卡；之後小關卡仍可無限挑戰下去，關卡序號會持續累加。`,
+          `每個大關卡通關數次後，線索密度會降到最低（最難）；解鎖下一個大關卡所需的通關次數則會隨棋盤越大逐漸提高（例如 ${CHAPTERS[0]}×${CHAPTERS[0]} 通關 ${chapterUnlockThreshold(CHAPTERS[0])} 次即可解鎖 ${CHAPTERS[1]}×${CHAPTERS[1]}，之後每一級門檻會再往上加）。之後小關卡仍可無限挑戰下去，關卡序號會持續累加。`,
         ],
       },
       {
@@ -99,7 +99,7 @@ const TEXT = {
         heading: "Chapters & Levels",
         body: [
           "Regular levels are grouped into chapters by board size. Levels inside a chapter are generated on demand — effectively infinite.",
-          `Clearing a chapter ${CHAPTER_MILESTONE} times drops clue density to its floor (hardest) and unlocks the next chapter; you can keep clearing levels in that chapter indefinitely afterward, with the level count still climbing.`,
+          `Clue density drops to its floor (hardest) after a chapter's first several clears. The clears needed to unlock the *next* chapter grow with board size instead (e.g. ${chapterUnlockThreshold(CHAPTERS[0])} clears unlocks ${CHAPTERS[1]}×${CHAPTERS[1]} from ${CHAPTERS[0]}×${CHAPTERS[0]}, with the bar rising further each chapter after that). You can keep clearing levels in a chapter indefinitely afterward, with the level count still climbing.`,
         ],
       },
       {

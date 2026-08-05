@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHAPTERS, CHAPTER_MILESTONE, SCORE_MILESTONE_INTERVAL, clueRatioForClear, nextChapterSize } from "../src/engine/chapters.mjs";
+import { CHAPTERS, CLUE_RAMP_CLEARS, chapterUnlockThreshold, SCORE_MILESTONE_INTERVAL, clueRatioForClear, nextChapterSize } from "../src/engine/chapters.mjs";
 import { getChapterEntry, isChapterUnlocked, recordChapterClear, willHitMilestoneOnNextClear, loadChapterProgress } from "../src/chapterProgress.js";
 
 function memoryStorage() {
@@ -19,8 +19,8 @@ test("clue ratio strictly decreases as chapterClearCount rises, then floors", ()
   const n = 8;
   const r0 = clueRatioForClear(n, 0);
   const r5 = clueRatioForClear(n, 5);
-  const rFloor = clueRatioForClear(n, CHAPTER_MILESTONE);
-  const rBeyond = clueRatioForClear(n, CHAPTER_MILESTONE + 20);
+  const rFloor = clueRatioForClear(n, CLUE_RAMP_CLEARS);
+  const rBeyond = clueRatioForClear(n, CLUE_RAMP_CLEARS + 20);
   assert.ok(r0 > r5 && r5 > rFloor);
   assert.equal(rFloor, rBeyond);
 });
@@ -35,11 +35,22 @@ test("first chapter is always unlocked with no progress", () => {
   assert.equal(isChapterUnlocked(CHAPTERS[0]), true);
 });
 
-test("second chapter locked until the first hits CHAPTER_MILESTONE clears", () => {
+test("second chapter locked until the first hits its unlock threshold", () => {
   global.localStorage = memoryStorage();
   assert.equal(isChapterUnlocked(CHAPTERS[1]), false);
-  for (let i = 0; i < CHAPTER_MILESTONE; i++) recordChapterClear(CHAPTERS[0], 10);
+  const threshold = chapterUnlockThreshold(CHAPTERS[0]);
+  for (let i = 0; i < threshold; i++) recordChapterClear(CHAPTERS[0], 10);
   assert.equal(isChapterUnlocked(CHAPTERS[1]), true);
+});
+
+test("chapter-unlock thresholds accelerate per chapter (triangular growth)", () => {
+  assert.equal(chapterUnlockThreshold(CHAPTERS[0]), 3); // 2x2 -> 3x3
+  assert.equal(chapterUnlockThreshold(CHAPTERS[1]), 6); // 3x3 -> 4x4
+  assert.equal(chapterUnlockThreshold(CHAPTERS[2]), 10); // 4x4 -> 5x5
+  assert.ok(
+    chapterUnlockThreshold(CHAPTERS[2]) - chapterUnlockThreshold(CHAPTERS[1]) >
+      chapterUnlockThreshold(CHAPTERS[1]) - chapterUnlockThreshold(CHAPTERS[0])
+  );
 });
 
 test("recordChapterClear reports justHitMilestone exactly on the crossing clear", () => {

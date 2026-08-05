@@ -2,7 +2,7 @@
 // numberlink_progress_v1 (unlockedLevel + best[levelIndex]) now that levels
 // are infinite/random within a chapter rather than a fixed indexed list.
 // Shape: { [size]: { chapterClearCount, bestScore } }
-import { CHAPTERS, CHAPTER_MILESTONE, SCORE_MILESTONE_INTERVAL } from "./engine/chapters.mjs";
+import { CHAPTERS, chapterUnlockThreshold, SCORE_MILESTONE_INTERVAL } from "./engine/chapters.mjs";
 
 const KEY = "chapter_progress_v1";
 
@@ -31,7 +31,7 @@ export function isChapterUnlocked(size) {
   const idx = CHAPTERS.indexOf(size);
   if (idx <= 0) return true; // first chapter (or unknown size) always open
   const prevSize = CHAPTERS[idx - 1];
-  return getChapterEntry(prevSize).chapterClearCount >= CHAPTER_MILESTONE;
+  return getChapterEntry(prevSize).chapterClearCount >= chapterUnlockThreshold(prevSize);
 }
 
 // The furthest CHAPTERS index the player has actually unlocked so far —

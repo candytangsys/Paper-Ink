@@ -8,7 +8,7 @@ import { fmtTime } from "../engine/share.mjs";
 import { createStreakStore } from "../engine/streak.mjs";
 import { getDailyEntry, loadDailyHistory } from "../dailyHistory.js";
 import { todayUTCString } from "../dateUtil.js";
-import { CHAPTERS, CHAPTER_MILESTONE } from "../engine/chapters.mjs";
+import { CHAPTERS, chapterUnlockThreshold } from "../engine/chapters.mjs";
 import { loadChapterProgress, isChapterUnlocked } from "../chapterProgress.js";
 import { track } from "../analytics.js";
 import { getPointsBalance } from "../pointsWallet.js";
@@ -169,7 +169,7 @@ export default function Home({ onSelect }) {
 
         <div style={styles.chapterGrid}>
           {chapters.map(({ size, chapterClearCount, unlocked }) => {
-            const mastered = chapterClearCount >= CHAPTER_MILESTONE;
+            const mastered = chapterClearCount >= chapterUnlockThreshold(size);
             return (
               <button
                 key={size}

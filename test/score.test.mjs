@@ -75,3 +75,37 @@ test("parTimeSec gives more time for lower clue density", () => {
   const sparse = parTimeSec(8, 0.1);
   assert.ok(sparse > dense);
 });
+
+test("omitting chapter context (pre-v3.8 call shape) adds no difficulty/starter bonus", () => {
+  const { breakdown, total } = computeScore({
+    timeSec: 100, parTimeSec: 100, mistakes: 0, usedTool: false, justHitMilestone: false,
+  });
+  assert.equal(breakdown.difficulty, 0);
+  assert.equal(breakdown.starter, 0);
+  assert.equal(total, 5 + 3 + 4 + 3);
+});
+
+test("difficulty bonus grows with chapter index, zero on chapter 0", () => {
+  const base = { timeSec: 100, parTimeSec: 100, mistakes: 0, usedTool: false, justHitMilestone: false };
+  const chapter0 = computeScore({ ...base, chapterIndex: 0 });
+  const chapter4 = computeScore({ ...base, chapterIndex: 4 });
+  const chapter11 = computeScore({ ...base, chapterIndex: 11 });
+  assert.equal(chapter0.breakdown.difficulty, 0);
+  assert.ok(chapter4.breakdown.difficulty > 0);
+  assert.ok(chapter11.breakdown.difficulty > chapter4.breakdown.difficulty);
+  assert.ok(chapter11.total > chapter0.total);
+});
+
+test("starter bonus only applies to chapter 0, decaying to 0 by the unlock threshold", () => {
+  const base = { timeSec: 100, parTimeSec: 100, mistakes: 0, usedTool: false, justHitMilestone: false };
+  const first = computeScore({ ...base, chapterIndex: 0, clearIndexInChapter: 1, chapterUnlockThreshold: 3 });
+  const second = computeScore({ ...base, chapterIndex: 0, clearIndexInChapter: 2, chapterUnlockThreshold: 3 });
+  const third = computeScore({ ...base, chapterIndex: 0, clearIndexInChapter: 3, chapterUnlockThreshold: 3 });
+  const fourth = computeScore({ ...base, chapterIndex: 0, clearIndexInChapter: 4, chapterUnlockThreshold: 3 });
+  const laterChapter = computeScore({ ...base, chapterIndex: 1, clearIndexInChapter: 1, chapterUnlockThreshold: 6 });
+  assert.equal(first.breakdown.starter, 15);
+  assert.ok(second.breakdown.starter > 0 && second.breakdown.starter < first.breakdown.starter);
+  assert.ok(third.breakdown.starter >= 0 && third.breakdown.starter < second.breakdown.starter);
+  assert.equal(fourth.breakdown.starter, 0);
+  assert.equal(laterChapter.breakdown.starter, 0);
+});
