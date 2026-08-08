@@ -104,7 +104,6 @@ export default function Home({ onSelect }) {
 
   return (
     <div style={styles.root}>
-      <LangToggle />
       <div style={styles.topbar}>
         <div style={styles.brandmark}>
           <div style={styles.sealDot}>筆</div>
@@ -119,6 +118,12 @@ export default function Home({ onSelect }) {
             <span style={styles.flame}>🔥</span>
             <span style={styles.streakNum}>{daily.streak}</span>
           </div>
+          {/* v3.9: was a separate absolutely-positioned overlay (fine on
+              every other screen, which doesn't have content sharing that
+              same top-right corner) — but here it sat right on top of
+              these two chips once the topbar's top padding was tightened,
+              so it now just joins the row as a normal chip instead. */}
+          <LangToggle style={styles.langChip} />
         </div>
       </div>
 
@@ -274,6 +279,18 @@ const styles = {
     background: "#fff8ec",
     border: `1px solid ${HOME_COLORS.hairline}`,
     borderRadius: 999,
+  },
+  langChip: {
+    position: "static",
+    padding: "6px 11px",
+    background: "#fff8ec",
+    color: HOME_COLORS.inkSoft,
+    border: `1px solid ${HOME_COLORS.hairline}`,
+    borderRadius: 999,
+    fontSize: 11.5,
+    fontWeight: 600,
+    fontFamily: HOME_FONT_MONO,
+    letterSpacing: "0.04em",
   },
   flame: { fontSize: 13 },
   streakNum: { fontFamily: HOME_FONT_MONO, fontWeight: 600, fontSize: 13, color: HOME_COLORS.seal },
